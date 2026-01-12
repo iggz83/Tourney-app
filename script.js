@@ -772,6 +772,14 @@
 		let courtCounter = 1;
 		const newMatches = [];
 
+		// Fixed-team helpers (persist across rounds)
+		const fixedTeams = session.format === 'DOUBLES_FIXED_TEAMS'
+			? (Array.isArray(session.teams) ? session.teams : [])
+			: [];
+		const fixedTeamIds = fixedTeams.map((t) => t.id);
+		const fixedTeamGames = new Map(fixedTeamIds.map((id) => [id, 0]));
+		const fixedTeamOpponentCounts = new Map();
+
 		for (let round = 1; round <= rounds; round++) {
 			courtCounter = 1;
 			if (session.format === 'DOUBLES_ROTATE') {
@@ -818,20 +826,14 @@
 					gamesPlayed.set(t2[0], (gamesPlayed.get(t2[0]) || 0) + 1);
 				}
 			} else if (session.format === 'DOUBLES_FIXED_TEAMS') {
-				const teams = Array.isArray(session.teams) ? session.teams : [];
-				if (teams.length < 2) throw new Error('Add at least 2 fixed teams for this session.');
-				const teamIds = teams.map((t) => t.id);
-				const teamGames = new Map(teamIds.map((id) => [id, 0]));
-				const teamOppCounts = new Map();
-
-				// Seed counts from already generated matches (none yet) — placeholder for future
+				if (fixedTeams.length < 2) throw new Error('Add at least 2 fixed teams for this session.');
 				const selectActiveTeams = (count) => {
-					const ids = teamIds.slice();
-					ids.sort((a, b) => (teamGames.get(a) || 0) - (teamGames.get(b) || 0));
+					const ids = fixedTeamIds.slice();
+					ids.sort((a, b) => (fixedTeamGames.get(a) || 0) - (fixedTeamGames.get(b) || 0));
 					return ids.slice(0, count);
 				};
 
-				const neededTeams = Math.min(teamIds.length, courts * 2);
+				const neededTeams = Math.min(fixedTeamIds.length, courts * 2);
 				const activeTeams = selectActiveTeams(neededTeams);
 				// Pair teams with minimal repeats
 				const remaining = activeTeams.slice();
@@ -841,15 +843,15 @@
 					let bestScore = Infinity;
 					for (let i = 0; i < remaining.length; i++) {
 						const b = remaining[i];
-						const score = getCount(teamOppCounts, a, b);
+						const score = getCount(fixedTeamOpponentCounts, a, b);
 						if (score < bestScore) {
 							bestScore = score;
 							bestIdx = i;
 						}
 					}
 					const b = remaining.splice(bestIdx, 1)[0];
-					const teamA = teams.find((t) => t.id === a);
-					const teamB = teams.find((t) => t.id === b);
+					const teamA = fixedTeams.find((t) => t.id === a);
+					const teamB = fixedTeams.find((t) => t.id === b);
 					if (!teamA || !teamB) continue;
 					newMatches.push({
 						id: uid(),
@@ -861,9 +863,9 @@
 						score1: null,
 						score2: null,
 					});
-					incCount(teamOppCounts, a, b);
-					teamGames.set(a, (teamGames.get(a) || 0) + 1);
-					teamGames.set(b, (teamGames.get(b) || 0) + 1);
+					incCount(fixedTeamOpponentCounts, a, b);
+					fixedTeamGames.set(a, (fixedTeamGames.get(a) || 0) + 1);
+					fixedTeamGames.set(b, (fixedTeamGames.get(b) || 0) + 1);
 					for (const pid of [...teamA.players, ...teamB.players]) gamesPlayed.set(pid, (gamesPlayed.get(pid) || 0) + 1);
 				}
 			} else {
@@ -942,7 +944,8 @@
 
 	// Gate
 	const shouldGate = () => {
-		return !!state.settings.requireAccessCode && !!state.settings.accessCodeHash;
+		if (!state.settings.requireAccessCode || !state.settings.accessCodeHash) return false;
+		return sessionStorage.getItem('pbme_unlocked') !== 'true';
 	};
 
 	const showGate = () => {
@@ -1242,6 +1245,7 @@
 		gateErrorEl.textContent = '';
 		const inputHash = fnv1a32Hex(gateCodeEl.value);
 		if (inputHash === state.settings.accessCodeHash) {
+			sessionStorage.setItem('pbme_unlocked', 'true');
 			hideGate();
 			return;
 		}
