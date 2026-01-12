@@ -3,12 +3,318 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PBMatchEngine Web App</title>
+    <title>PBMatchEngine</title>
+    <meta name="description" content="Pickleball match scheduling, scoring, standings, and DUPR CSV export.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Welcome to PBMatchEngine</h1>
-    <p>This is your starting web app. Feature implementation coming soon!</p>
+    <div id="accessGate" class="gate" hidden>
+        <div class="gate__card" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+            <div class="gate__brand">PBMatchEngine</div>
+            <h2 id="gateTitle" class="gate__title">Enter access code</h2>
+            <p class="muted">This club requires an access code to continue.</p>
+            <form id="gateForm" class="form">
+                <label class="field">
+                    <span class="field__label">Access code</span>
+                    <input id="gateCode" type="password" autocomplete="current-password" required />
+                </label>
+                <button class="btn btn--primary" type="submit">Unlock</button>
+                <div id="gateError" class="error" role="status" aria-live="polite"></div>
+            </form>
+        </div>
+    </div>
+
+    <header class="topbar">
+        <div class="topbar__left">
+            <div class="brand">
+                <div class="brand__logo" aria-hidden="true">PB</div>
+                <div class="brand__text">
+                    <div class="brand__name" id="clubName">PBMatchEngine</div>
+                    <div class="brand__tagline">Schedule • Score • Standings • Export</div>
+                </div>
+            </div>
+        </div>
+        <div class="topbar__right">
+            <button class="btn btn--ghost" data-action="new-session" type="button">New session</button>
+            <button class="btn btn--ghost" data-view="settings" type="button">Settings</button>
+        </div>
+    </header>
+
+    <div class="layout">
+        <nav class="sidebar" aria-label="Primary">
+            <button class="navitem is-active" data-view="home" type="button">Home</button>
+            <button class="navitem" data-view="players" type="button">Players</button>
+            <button class="navitem" data-view="session" type="button">Session</button>
+            <button class="navitem" data-view="schedule" type="button">Schedule</button>
+            <button class="navitem" data-view="scores" type="button">Scores</button>
+            <button class="navitem" data-view="standings" type="button">Standings</button>
+            <button class="navitem" data-view="export" type="button">Export</button>
+        </nav>
+
+        <main class="content">
+            <section class="view" data-view-panel="home">
+                <div class="hero">
+                    <h1 class="hero__title">Pickleball Match Engine</h1>
+                    <p class="hero__subtitle">Create sessions, generate round robin schedules, let players enter scores, and export results.</p>
+                </div>
+
+                <div class="grid">
+                    <div class="card">
+                        <div class="card__title">Quick start</div>
+                        <ol class="steps">
+                            <li>Add players</li>
+                            <li>Create a session</li>
+                            <li>Generate schedule</li>
+                            <li>Enter scores</li>
+                            <li>Review standings + export CSV</li>
+                        </ol>
+                    </div>
+                    <div class="card">
+                        <div class="card__title">Current session</div>
+                        <div id="currentSessionSummary" class="muted">No session selected yet.</div>
+                        <div class="card__actions">
+                            <button class="btn btn--primary" data-view="session" type="button">Go to Session</button>
+                            <button class="btn" data-action="generate-schedule" type="button">Generate schedule</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view" data-view-panel="players" hidden>
+                <div class="view__header">
+                    <h2>Players</h2>
+                    <div class="view__headerActions">
+                        <button class="btn" data-action="download-backup" type="button">Download backup</button>
+                        <label class="btn btn--ghost" for="importBackupInput" role="button">Import backup</label>
+                        <input id="importBackupInput" type="file" accept="application/json" hidden />
+                    </div>
+                </div>
+
+                <div class="grid grid--2">
+                    <div class="card">
+                        <div class="card__title">Add a player</div>
+                        <form id="playerForm" class="form">
+                            <input id="playerId" type="hidden" />
+                            <label class="field">
+                                <span class="field__label">Name</span>
+                                <input id="playerName" type="text" placeholder="e.g., Jordan Lee" required />
+                            </label>
+                            <div class="row">
+                                <label class="field">
+                                    <span class="field__label">Gender</span>
+                                    <select id="playerGender" required>
+                                        <option value="">Select…</option>
+                                        <option value="M">M</option>
+                                        <option value="F">F</option>
+                                        <option value="X">X / Prefer not to say</option>
+                                    </select>
+                                </label>
+                                <label class="field">
+                                    <span class="field__label">DUPR ID (optional)</span>
+                                    <input id="playerDupr" type="text" placeholder="Optional" />
+                                </label>
+                            </div>
+                            <div class="row">
+                                <button class="btn btn--primary" type="submit">Save player</button>
+                                <button class="btn" data-action="clear-player-form" type="button">Clear</button>
+                            </div>
+                            <div id="playerFormMsg" class="muted" role="status" aria-live="polite"></div>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <div class="card__title">Roster</div>
+                        <div class="muted" id="playerCount"></div>
+                        <div id="playersTable" class="tableWrap"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view" data-view-panel="session" hidden>
+                <div class="view__header">
+                    <h2>Session</h2>
+                    <div class="view__headerActions">
+                        <button class="btn" data-action="generate-schedule" type="button">Generate schedule</button>
+                    </div>
+                </div>
+
+                <div class="grid grid--2">
+                    <div class="card">
+                        <div class="card__title">Create / edit session</div>
+                        <form id="sessionForm" class="form">
+                            <input id="sessionId" type="hidden" />
+                            <label class="field">
+                                <span class="field__label">Session name</span>
+                                <input id="sessionName" type="text" placeholder="e.g., Tuesday Night Round Robin" required />
+                            </label>
+                            <div class="row">
+                                <label class="field">
+                                    <span class="field__label">Date</span>
+                                    <input id="sessionDate" type="date" required />
+                                </label>
+                                <label class="field">
+                                    <span class="field__label">Courts</span>
+                                    <input id="sessionCourts" type="number" min="1" max="50" value="4" required />
+                                </label>
+                            </div>
+                            <label class="field">
+                                <span class="field__label">Format</span>
+                                <select id="sessionFormat" required>
+                                    <option value="">Select…</option>
+                                    <option value="DOUBLES_ROTATE">Doubles — rotate partners (round robin)</option>
+                                    <option value="DOUBLES_FIXED_TEAMS">Doubles — fixed teams (round robin)</option>
+                                    <option value="SINGLES">Singles (round robin)</option>
+                                </select>
+                            </label>
+                            <div class="row">
+                                <label class="field field--inline">
+                                    <input id="sessionPreferMixed" type="checkbox" />
+                                    <span>Prefer mixed teams (when possible)</span>
+                                </label>
+                                <label class="field">
+                                    <span class="field__label">Rounds</span>
+                                    <input id="sessionRounds" type="number" min="1" max="100" value="6" required />
+                                </label>
+                            </div>
+                            <div class="row">
+                                <button class="btn btn--primary" type="submit">Save session</button>
+                                <button class="btn" data-action="clear-session-form" type="button">Clear</button>
+                            </div>
+                            <div class="muted">Tip: for rotating-partners doubles, each round uses up to $4 \times$ courts players. Extra players rotate in/out for fairness.</div>
+                            <div id="sessionFormMsg" class="muted" role="status" aria-live="polite"></div>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <div class="card__title">Sessions</div>
+                        <div id="sessionsTable" class="tableWrap"></div>
+                    </div>
+                </div>
+
+                <div class="card" id="fixedTeamsCard" hidden>
+                    <div class="card__title">Fixed teams (for this session)</div>
+                    <div class="muted">Only needed for “Doubles — fixed teams”.</div>
+                    <div class="grid grid--2" style="margin-top: 12px;">
+                        <div>
+                            <form id="teamForm" class="form">
+                                <input id="teamId" type="hidden" />
+                                <div class="row">
+                                    <label class="field">
+                                        <span class="field__label">Player 1</span>
+                                        <select id="teamP1" required></select>
+                                    </label>
+                                    <label class="field">
+                                        <span class="field__label">Player 2</span>
+                                        <select id="teamP2" required></select>
+                                    </label>
+                                </div>
+                                <div class="row">
+                                    <button class="btn btn--primary" type="submit">Save team</button>
+                                    <button class="btn" data-action="clear-team-form" type="button">Clear</button>
+                                </div>
+                                <div id="teamFormMsg" class="muted" role="status" aria-live="polite"></div>
+                            </form>
+                        </div>
+                        <div>
+                            <div id="teamsTable" class="tableWrap"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view" data-view-panel="schedule" hidden>
+                <div class="view__header">
+                    <h2>Schedule</h2>
+                    <div class="view__headerActions">
+                        <button class="btn" data-action="generate-schedule" type="button">Regenerate</button>
+                        <button class="btn btn--ghost" data-action="clear-schedule" type="button">Clear schedule</button>
+                    </div>
+                </div>
+                <div id="scheduleWrap" class="stack"></div>
+            </section>
+
+            <section class="view" data-view-panel="scores" hidden>
+                <div class="view__header">
+                    <h2>Scores</h2>
+                    <div class="view__headerActions">
+                        <button class="btn" data-action="mark-all-unplayed" type="button">Mark all unplayed</button>
+                    </div>
+                </div>
+                <div id="scoresWrap" class="stack"></div>
+            </section>
+
+            <section class="view" data-view-panel="standings" hidden>
+                <div class="view__header">
+                    <h2>Standings</h2>
+                    <div class="view__headerActions">
+                        <button class="btn" data-action="refresh-standings" type="button">Refresh</button>
+                    </div>
+                </div>
+                <div id="standingsWrap" class="stack"></div>
+            </section>
+
+            <section class="view" data-view-panel="export" hidden>
+                <div class="view__header">
+                    <h2>Export</h2>
+                </div>
+                <div class="grid grid--2">
+                    <div class="card">
+                        <div class="card__title">DUPR CSV</div>
+                        <p class="muted">This generates a CSV file you can upload into DUPR (schema may need tweaking once you confirm DUPR’s latest import format).</p>
+                        <button class="btn btn--primary" data-action="export-dupr" type="button">Download DUPR CSV</button>
+                        <div id="exportMsg" class="muted" role="status" aria-live="polite"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card__title">Backup</div>
+                        <p class="muted">Use this to move data between devices (players, sessions, matches, scores).</p>
+                        <div class="row">
+                            <button class="btn" data-action="download-backup" type="button">Download backup JSON</button>
+                            <label class="btn btn--ghost" for="importBackupInput2" role="button">Import backup JSON</label>
+                            <input id="importBackupInput2" type="file" accept="application/json" hidden />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="view" data-view-panel="settings" hidden>
+                <div class="view__header">
+                    <h2>Settings</h2>
+                </div>
+                <div class="grid grid--2">
+                    <div class="card">
+                        <div class="card__title">Club</div>
+                        <form id="settingsForm" class="form">
+                            <label class="field">
+                                <span class="field__label">Club name</span>
+                                <input id="settingsClubName" type="text" placeholder="PBMatchEngine" />
+                            </label>
+                            <label class="field field--inline">
+                                <input id="settingsRequireCode" type="checkbox" />
+                                <span>Require access code (MVP)</span>
+                            </label>
+                            <label class="field">
+                                <span class="field__label">Set / change access code</span>
+                                <input id="settingsAccessCode" type="password" placeholder="Leave blank to keep current" autocomplete="new-password" />
+                                <div class="muted">Note: this is a static-site gate; real authentication will require a backend.</div>
+                            </label>
+                            <button class="btn btn--primary" type="submit">Save settings</button>
+                            <div id="settingsMsg" class="muted" role="status" aria-live="polite"></div>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <div class="card__title">Danger zone</div>
+                        <p class="muted">This clears local data on this device only.</p>
+                        <button class="btn btn--danger" data-action="reset-all" type="button">Reset all local data</button>
+                    </div>
+                </div>
+            </section>
+
+            <footer class="footer">
+                <div class="muted">PBMatchEngine MVP • Local-only storage • v0.1</div>
+            </footer>
+        </main>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

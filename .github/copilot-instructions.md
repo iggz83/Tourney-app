@@ -4,8 +4,8 @@ This file tracks the step-by-step setup and development process for the PBMatchE
 
 ## Steps
 - [x] Project folder created
-- [ ] Project scaffolded (HTML, CSS, JS)
-- [ ] Git initialized
-- [ ] Linked to GitHub repository
+- [x] Project scaffolded (HTML, CSS, JS)
+- [x] Git initialized
+- [x] Linked to GitHub repository
 - [ ] Feature requirements implemented
-- [ ] Documentation updated
+- [x] Documentation updated
