@@ -72,6 +72,14 @@
 		matches: [],
 	});
 
+	const hardResetLocal = () => {
+		try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+		try { sessionStorage.removeItem('pbme_unlocked'); } catch { /* ignore */ }
+		state = defaultState();
+		currentSessionId = '';
+		try { saveState(); } catch { /* ignore */ }
+	};
+
 	const loadState = () => {
 		try {
 			const raw = localStorage.getItem(STORAGE_KEY);
@@ -975,6 +983,14 @@
 
 		try {
 			switch (action) {
+				case 'gate-reset': {
+					if (!confirm('Reset access and clear all local data on this device?')) return;
+					hardResetLocal();
+					hideGate();
+					renderAll();
+					setView('home');
+					break;
+				}
 				case 'clear-player-form': {
 					playerIdEl.value = '';
 					playerNameEl.value = '';
@@ -1119,9 +1135,7 @@
 				}
 				case 'reset-all': {
 					if (!confirm('Reset all local data on this device?')) return;
-					localStorage.removeItem(STORAGE_KEY);
-					state = loadState();
-					currentSessionId = '';
+					hardResetLocal();
 					renderAll();
 					setView('home');
 					break;
@@ -1287,6 +1301,20 @@
 	importBackupInput2.addEventListener('change', onImportChange);
 
 	// Init
+	try {
+		const params = new URLSearchParams(window.location.search);
+		if (params.get('reset') === '1') {
+			hardResetLocal();
+			// Remove the query param so refreshes are normal
+			params.delete('reset');
+			const qs = params.toString();
+			const nextUrl = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash || ''}`;
+			history.replaceState(null, '', nextUrl);
+		}
+	} catch {
+		// ignore
+	}
+
 	if (!sessionDateEl.value) sessionDateEl.value = nowIsoDate();
 	if (shouldGate()) showGate();
 	renderAll();	

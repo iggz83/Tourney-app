@@ -19,6 +19,10 @@
                     <input id="gateCode" type="password" autocomplete="current-password" required />
                 </label>
                 <button class="btn btn--primary" type="submit">Unlock</button>
+                <button class="btn btn--danger" type="button" data-action="gate-reset">Reset access (clears local data)</button>
+                <div class="muted" style="font-size:12px;">
+                    If you forgot the code or got locked out, use “Reset access”. This removes all local data on this device.
+                </div>
                 <div id="gateError" class="error" role="status" aria-live="polite"></div>
             </form>
         </div>
@@ -315,6 +319,6 @@
         </main>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=20260112"></script>
 </body>
 </html>
