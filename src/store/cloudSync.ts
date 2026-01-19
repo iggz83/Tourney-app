@@ -6,6 +6,7 @@ export type CloudSyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 
 export type TournamentListItem = {
   id: string
+  name: string
   created_at: string
   updated_at: string
 }
@@ -103,11 +104,24 @@ export async function listTournaments(limit = 25): Promise<TournamentListItem[]>
   if (!supabase) throw new Error('Supabase not configured')
   const { data, error } = await supabase
     .from('tournaments')
-    .select('id,created_at,updated_at')
+    .select('id,name,created_at,updated_at')
     .order('updated_at', { ascending: false })
     .limit(limit)
   if (error) throw error
   return (data ?? []) as TournamentListItem[]
+}
+
+export async function fetchTournamentName(tid: string): Promise<string> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase.from('tournaments').select('name').eq('id', tid).maybeSingle()
+  if (error) throw error
+  return (data?.name as string | undefined) ?? ''
+}
+
+export async function updateTournamentName(tid: string, name: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.from('tournaments').update({ name }).eq('id', tid)
+  if (error) throw error
 }
 
 export async function deleteTournament(tid: string): Promise<void> {
@@ -232,7 +246,7 @@ export function connectCloudSync(args: {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'tournaments', filter: `id=eq.${tid}` },
       (payload) => {
-        const next = (payload.new as any)?.state
+        const next = (payload.new as { state?: unknown } | null)?.state
         const normalized = normalizeTournamentState(next)
         if (normalized) onRemoteCoreState(normalized)
       },
@@ -241,19 +255,22 @@ export function connectCloudSync(args: {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${tid}` },
       (payload) => {
-        const r = payload.new as any
-        if (!r) return
-        const score = r.score_a == null || r.score_b == null ? undefined : { a: r.score_a, b: r.score_b }
+        const r = payload.new as Partial<MatchRow> | null
+        if (!r || typeof r.match_id !== 'string') return
+        const score =
+          r.score_a == null || r.score_b == null || typeof r.score_a !== 'number' || typeof r.score_b !== 'number'
+            ? undefined
+            : { a: r.score_a, b: r.score_b }
         const m: Match = {
           id: r.match_id,
-          divisionId: r.division_id,
-          round: r.round,
-          matchupIndex: r.matchup_index,
-          eventType: r.event_type,
-          seed: r.seed,
-          court: r.court,
-          clubA: r.club_a,
-          clubB: r.club_b,
+          divisionId: String(r.division_id ?? ''),
+          round: (Number(r.round) as 1 | 2 | 3) ?? 1,
+          matchupIndex: (Number(r.matchup_index) as 0 | 1) ?? 0,
+          eventType: String(r.event_type ?? '') as Match['eventType'],
+          seed: Number(r.seed ?? 0),
+          court: Number(r.court ?? 0),
+          clubA: String(r.club_a ?? '') as Match['clubA'],
+          clubB: String(r.club_b ?? '') as Match['clubB'],
           score,
           completedAt: r.completed_at ?? undefined,
         }

@@ -1,7 +1,7 @@
 import { SEEDED_EVENTS, SKILL_DIVISIONS } from '../domain/constants'
 import type { ClubId, EventType, PlayerId } from '../domain/types'
 import { seedKey } from '../domain/keys'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTournamentStore } from '../store/tournamentStore'
 import { normalizeTournamentState } from '../store/tournamentStore'
 import {
@@ -11,7 +11,7 @@ import {
   setTournamentIdInUrl,
   shouldEnableCloudSync,
 } from '../store/cloudSync'
-import { deleteTournament, listTournaments, type TournamentListItem } from '../store/cloudSync'
+import { deleteTournament, fetchTournamentName, listTournaments, type TournamentListItem, updateTournamentName } from '../store/cloudSync'
 
 function playerLabel(p: { firstName: string; lastName: string }) {
   const full = `${p.firstName} ${p.lastName}`.trim()
@@ -40,6 +40,7 @@ export function SetupPage() {
   const [pickerLoading, setPickerLoading] = useState(false)
   const [pickerError, setPickerError] = useState<string | null>(null)
   const [tournaments, setTournaments] = useState<TournamentListItem[]>([])
+  const [tournamentName, setTournamentName] = useState<string>('')
 
   const playersForClub = useMemo(
     () => state.players.filter((p) => p.clubId === clubId && p.divisionId === divisionId),
@@ -52,6 +53,21 @@ export function SetupPage() {
   )
 
   const seedsForClub = divisionConfig?.seedsByClub?.[clubId]
+
+  const tid = getTournamentIdFromUrl()
+  const cloudEnabled = shouldEnableCloudSync()
+
+  useEffect(() => {
+    if (!cloudEnabled || !tid) return
+    let cancelled = false
+    setTournamentName('')
+    void fetchTournamentName(tid).then((name) => {
+      if (!cancelled) setTournamentName(name ?? '')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [cloudEnabled, tid])
 
   function importFromFile(file: File) {
     setImportError(null)
@@ -123,6 +139,21 @@ export function SetupPage() {
             <div className="text-sm text-slate-300">
               Tournament ID (tid):{' '}
               <span className="font-mono text-slate-100">{getTournamentIdFromUrl() ?? '— not set —'}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="text-xs font-semibold text-slate-400">Name</div>
+              <input
+                className="w-72 max-w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
+                placeholder="e.g. 2026 Inter-Club Finals"
+                value={tournamentName}
+                onChange={(e) => setTournamentName(e.target.value)}
+                onBlur={() => {
+                  const currentTid = getTournamentIdFromUrl()
+                  if (!currentTid) return
+                  if (!shouldEnableCloudSync()) return
+                  void updateTournamentName(currentTid, tournamentName.trim())
+                }}
+              />
             </div>
             <div className="text-xs text-slate-400">
               Share the same link (same <span className="font-mono">tid</span>) to the scoring device and the TV.
@@ -225,16 +256,20 @@ export function SetupPage() {
               ) : (
                 <div className="overflow-hidden rounded-xl border border-slate-800">
                   <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+                    <div className="col-span-3">Name</div>
                     <div className="col-span-5">Tournament ID</div>
-                    <div className="col-span-3">Updated</div>
-                    <div className="col-span-4 text-right">Actions</div>
+                    <div className="col-span-2">Updated</div>
+                    <div className="col-span-2 text-right">Actions</div>
                   </div>
                   <div className="divide-y divide-slate-800 bg-slate-950/30">
                     {tournaments.map((t) => (
                       <div key={t.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
+                        <div className="col-span-3 truncate text-sm font-semibold text-slate-100">
+                          {t.name?.trim()?.length ? t.name : <span className="text-slate-500">(unnamed)</span>}
+                        </div>
                         <div className="col-span-5 font-mono text-xs text-slate-200">{t.id}</div>
-                        <div className="col-span-3 text-xs text-slate-400">{new Date(t.updated_at).toLocaleString()}</div>
-                        <div className="col-span-4 flex justify-end gap-2">
+                        <div className="col-span-2 text-xs text-slate-400">{new Date(t.updated_at).toLocaleDateString()}</div>
+                        <div className="col-span-2 flex justify-end gap-2">
                           <button
                             className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium hover:bg-slate-700"
                             onClick={() => {
