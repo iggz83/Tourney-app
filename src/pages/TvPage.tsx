@@ -65,26 +65,22 @@ export function TvPage() {
             <div className="text-sm text-slate-500">W-L • Diff</div>
           </div>
 
-          <div className="space-y-2">
+          <div className="max-w-[1050px] space-y-2">
             {clubStandings.map((row, idx) => (
               <div
                 key={row.clubId}
-                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
+                className="grid grid-cols-[40px_minmax(0,1fr)_110px_90px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 text-center text-xl font-bold text-slate-200">{idx + 1}</div>
-                  <div className="min-w-0">
-                    <div className="truncate text-lg font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
-                  </div>
+                <div className="text-center text-xl font-bold text-slate-200">{idx + 1}</div>
+                <div className="min-w-0">
+                  <div className="truncate text-lg font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                 </div>
-                <div className="shrink-0 text-right tabular-nums">
-                  <div className="text-2xl font-bold">
-                    {row.wins}
-                    <span className="text-slate-500">-{row.losses}</span>
-                  </div>
-                  <div className="text-base font-semibold text-slate-200">
-                    {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
-                  </div>
+                <div className="text-right tabular-nums text-2xl font-bold">
+                  {row.wins}
+                  <span className="text-slate-500">-{row.losses}</span>
+                </div>
+                <div className="text-right tabular-nums text-base font-semibold text-slate-200 whitespace-nowrap">
+                  {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                 </div>
               </div>
             ))}
