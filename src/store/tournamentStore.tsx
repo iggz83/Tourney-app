@@ -34,6 +34,7 @@ type Action =
       playerIds: [PlayerId | null, PlayerId | null]
     }
   | { type: 'schedule.generate' }
+  | { type: 'match.unlock'; matchId: MatchId }
   | { type: 'match.score.set'; matchId: MatchId; score?: { a: number; b: number } }
 
 function touch(state: TournamentStateV2): TournamentStateV2 {
@@ -114,6 +115,10 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
         return prev?.score ? { ...m, score: prev.score, completedAt: prev.completedAt } : m
       })
       return touch({ ...state, matches: merged })
+    }
+    case 'match.unlock': {
+      const matches = state.matches.map((m) => (m.id === action.matchId ? { ...m, completedAt: undefined } : m))
+      return touch({ ...state, matches })
     }
     case 'match.score.set': {
       const matches = state.matches.map((m) => {
@@ -233,6 +238,7 @@ type Store = {
     importState(state: TournamentStateV2): void
     updatePlayer(playerId: PlayerId, firstName: string, lastName: string): void
     autoSeed(divisionId: string, clubId?: ClubId): void
+    unlockMatch(matchId: MatchId): void
     setSeed(
       divisionId: string,
       clubId: ClubId,
@@ -433,6 +439,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       importState: (s) => dispatch({ type: 'import', state: s }),
       updatePlayer: (playerId, firstName, lastName) => dispatch({ type: 'player.update', playerId, firstName, lastName }),
       autoSeed: (divisionId, clubId) => dispatch({ type: 'division.autoseed', divisionId, clubId }),
+      unlockMatch: (matchId) => dispatch({ type: 'match.unlock', matchId }),
       setSeed: (divisionId, clubId, eventType, seed, playerIds) =>
         dispatch({ type: 'division.seed.set', divisionId, clubId, eventType, seed, playerIds }),
       generateSchedule: () => dispatch({ type: 'schedule.generate' }),

@@ -41,6 +41,7 @@ export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
   const [round, setRound] = useState<'all' | '1' | '2' | '3'>('all')
+  const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
 
   const playersById = useMemo(() => getPlayersById(state), [state])
 
@@ -130,6 +131,11 @@ export function ScoreEntryPage() {
             const aWon = computed.winnerClubId === m.clubA
             const bWon = computed.winnerClubId === m.clubB
 
+            const locked = !!m.completedAt
+            const draft = drafts[m.id] ?? { a: m.score?.a?.toString() ?? '', b: m.score?.b?.toString() ?? '' }
+            const showA = locked ? (m.score?.a?.toString() ?? '') : draft.a
+            const showB = locked ? (m.score?.b?.toString() ?? '') : draft.b
+
             return (
               <div key={m.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
                 <div className="col-span-1 text-slate-300">{m.round}</div>
@@ -154,14 +160,13 @@ export function ScoreEntryPage() {
                     className={[
                       'w-14 rounded-md border px-2 py-1 text-right text-sm outline-none',
                       aWon ? 'border-emerald-700 bg-emerald-950/40 text-emerald-100' : 'border-slate-800 bg-slate-950/40 text-slate-100',
+                      locked ? 'opacity-70' : '',
                     ].join(' ')}
-                    value={m.score?.a ?? ''}
-                    onChange={(e) => {
-                      const nextA = parseScore(e.target.value)
-                      const nextB = m.score?.b
-                      if (nextA === undefined && nextB === undefined) actions.setScore(m.id, undefined)
-                      else actions.setScore(m.id, { a: nextA ?? 0, b: nextB ?? 0 })
-                    }}
+                    value={showA}
+                    disabled={locked}
+                    onChange={(e) =>
+                      setDrafts((prev) => ({ ...prev, [m.id]: { a: e.target.value, b: prev[m.id]?.b ?? draft.b } }))
+                    }
                     placeholder="0"
                   />
                   <span className="text-slate-500">-</span>
@@ -170,23 +175,59 @@ export function ScoreEntryPage() {
                     className={[
                       'w-14 rounded-md border px-2 py-1 text-right text-sm outline-none',
                       bWon ? 'border-emerald-700 bg-emerald-950/40 text-emerald-100' : 'border-slate-800 bg-slate-950/40 text-slate-100',
+                      locked ? 'opacity-70' : '',
                     ].join(' ')}
-                    value={m.score?.b ?? ''}
-                    onChange={(e) => {
-                      const nextB = parseScore(e.target.value)
-                      const nextA = m.score?.a
-                      if (nextA === undefined && nextB === undefined) actions.setScore(m.id, undefined)
-                      else actions.setScore(m.id, { a: nextA ?? 0, b: nextB ?? 0 })
-                    }}
+                    value={showB}
+                    disabled={locked}
+                    onChange={(e) =>
+                      setDrafts((prev) => ({ ...prev, [m.id]: { a: prev[m.id]?.a ?? draft.a, b: e.target.value } }))
+                    }
                     placeholder="0"
                   />
-                  <button
-                    className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
-                    title="Clear score"
-                    onClick={() => actions.setScore(m.id, undefined)}
-                  >
-                    Clear
-                  </button>
+                  {locked ? (
+                    <button
+                      className="rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-700"
+                      title="Unlock to edit"
+                      onClick={() => {
+                        actions.unlockMatch(m.id)
+                        setDrafts((prev) => ({
+                          ...prev,
+                          [m.id]: { a: m.score?.a?.toString() ?? '', b: m.score?.b?.toString() ?? '' },
+                        }))
+                      }}
+                    >
+                      Edit
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="rounded-md bg-emerald-800 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                        title="Commit score"
+                        onClick={() => {
+                          const nextA = parseScore(draft.a)
+                          const nextB = parseScore(draft.b)
+                          if (nextA === undefined || nextB === undefined) {
+                            alert('Enter both scores before saving.')
+                            return
+                          }
+                          actions.setScore(m.id, { a: nextA, b: nextB })
+                          setDrafts((prev) => {
+                            const { [m.id]: _, ...rest } = prev
+                            return rest
+                          })
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
+                        title="Clear draft"
+                        onClick={() => setDrafts((prev) => ({ ...prev, [m.id]: { a: '', b: '' } }))}
+                      >
+                        Clear
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )
