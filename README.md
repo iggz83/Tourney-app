@@ -37,7 +37,8 @@ VITE_SUPABASE_ANON_KEY="YOUR_ANON_KEY"
 ### 4) Use cloud sync
 
 Open the app with a tournament id:
-- `http://localhost:5173/standings?tid=YOUR_TOURNAMENT_ID`
+- Local dev: `http://localhost:5173/#/standings?tid=YOUR_TOURNAMENT_ID`
+- GitHub Pages: `https://iggz83.github.io/Tourney-app/#/standings?tid=YOUR_TOURNAMENT_ID`
 
 Tip: Use a random id (UUID). Share the same link to the TV (or just `/tv?tid=...`).
 

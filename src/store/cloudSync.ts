@@ -5,12 +5,34 @@ import { supabase } from './supabaseClient'
 export type CloudSyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 
 export function getTournamentIdFromUrl(): string | null {
+  // Supports both:
+  // - Browser URLs: /path?tid=...
+  // - HashRouter URLs on GitHub Pages: /#/route?tid=...
   const u = new URL(window.location.href)
-  return u.searchParams.get('tid')
+  const direct = u.searchParams.get('tid')
+  if (direct) return direct
+
+  const hash = u.hash || ''
+  const idx = hash.indexOf('?')
+  if (idx === -1) return null
+  const qs = hash.slice(idx + 1)
+  return new URLSearchParams(qs).get('tid')
 }
 
 export function setTournamentIdInUrl(tid: string) {
   const u = new URL(window.location.href)
+
+  // If we're on HashRouter and already have a hash route, keep tid in the hash query.
+  if (u.hash.includes('#/')) {
+    const [pathPart, queryPart] = u.hash.split('?')
+    const sp = new URLSearchParams(queryPart ?? '')
+    sp.set('tid', tid)
+    u.hash = `${pathPart}?${sp.toString()}`
+    window.history.replaceState({}, '', u.toString())
+    return
+  }
+
+  // Otherwise set it as normal query param.
   u.searchParams.set('tid', tid)
   window.history.replaceState({}, '', u.toString())
 }
