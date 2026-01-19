@@ -24,7 +24,7 @@ const STORAGE_KEY_V1 = 'ictpt_state_v1'
 
 type Action =
   | { type: 'reset' }
-  | { type: 'import'; state: TournamentStateV2 }
+  | { type: 'import'; state: TournamentStateV2; source?: 'local' | 'remote' }
   | { type: 'club.add'; clubId: ClubId; name: string }
   | { type: 'club.remove'; clubId: ClubId }
   | { type: 'club.name.set'; clubId: ClubId; name: string }
@@ -41,8 +41,8 @@ type Action =
     }
   | { type: 'schedule.generate' }
   | { type: 'schedule.regenerate' }
-  | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number] }
-  | { type: 'match.delete'; matchId: MatchId }
+  | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number]; source?: 'local' | 'remote' }
+  | { type: 'match.delete'; matchId: MatchId; source?: 'local' | 'remote' }
   | { type: 'matches.scores.clearAll' }
   | { type: 'match.unlock'; matchId: MatchId }
   | { type: 'match.score.set'; matchId: MatchId; score?: { a: number; b: number } }
@@ -56,7 +56,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
     case 'reset':
       return createInitialTournamentState()
     case 'import':
-      return touch(action.state)
+      // IMPORTANT: Don't "touch" remote imports; otherwise we treat remote updates as local edits and
+      // will immediately re-push back to Supabase (causing schedule churn / delete+reinsert loops).
+      return action.source === 'remote' ? action.state : touch(action.state)
     case 'club.add': {
       const clubId = action.clubId.trim()
       if (!clubId.length) return state
@@ -225,11 +227,11 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
             }
           })
         : [...state.matches, incoming]
-      return touch({ ...state, matches })
+      return action.source === 'remote' ? { ...state, matches } : touch({ ...state, matches })
     }
     case 'match.delete': {
       const matches = state.matches.filter((m) => m.id !== action.matchId)
-      return touch({ ...state, matches })
+      return action.source === 'remote' ? { ...state, matches } : touch({ ...state, matches })
     }
     case 'matches.scores.clearAll': {
       const matches = state.matches.map((m) => ({ ...m, score: undefined, completedAt: undefined }))
@@ -449,7 +451,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             isApplyingRemote.current = true
             // Preserve current match scores (they come from match rows)
             const merged: TournamentStateV2 = { ...remote, matches: stateRef.current.matches }
-            dispatch({ type: 'import', state: merged })
+            dispatch({ type: 'import', state: merged, source: 'remote' })
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -457,14 +459,14 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           onRemoteMatchChange: (m) => {
             // Apply match row changes without touching core state (prevents overwriting club/player edits while typing).
             isApplyingRemote.current = true
-            dispatch({ type: 'matches.upsert', match: m })
+            dispatch({ type: 'matches.upsert', match: m, source: 'remote' })
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
           },
           onRemoteMatchDelete: (matchId) => {
             isApplyingRemote.current = true
-            dispatch({ type: 'match.delete', matchId })
+            dispatch({ type: 'match.delete', matchId, source: 'remote' })
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -488,7 +490,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           const chosenMatches = remoteMatches.length > 0 ? remoteMatches : local.matches
 
           isApplyingRemote.current = true
-          dispatch({ type: 'import', state: { ...chosenCore, matches: chosenMatches } })
+          dispatch({ type: 'import', state: { ...chosenCore, matches: chosenMatches }, source: 'remote' })
           setTimeout(() => {
             isApplyingRemote.current = false
           }, 0)
