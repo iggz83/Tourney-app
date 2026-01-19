@@ -116,9 +116,7 @@ export function TvPage() {
                             <div className="min-w-0">
                               <div className="truncate text-base font-semibold text-slate-100">
                                 {displayPlayerName(p)}{' '}
-                                <span className="text-slate-500 font-medium">
-                                  ({clubNameById.get(p.clubId) ?? p.clubId})
-                                </span>
+                                <span className="text-slate-500 font-medium">({p.clubId})</span>
                               </div>
                             </div>
                           </div>
@@ -140,9 +138,7 @@ export function TvPage() {
                             <div className="min-w-0">
                               <div className="truncate text-base font-semibold text-slate-100">
                                 {displayPlayerName(p)}{' '}
-                                <span className="text-slate-500 font-medium">
-                                  ({clubNameById.get(p.clubId) ?? p.clubId})
-                                </span>
+                                <span className="text-slate-500 font-medium">({p.clubId})</span>
                               </div>
                             </div>
                           </div>
