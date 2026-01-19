@@ -262,6 +262,20 @@ export function SetupPage() {
                 ))}
               </select>
             </label>
+            <button
+              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
+              onClick={() => actions.autoSeed(divisionId, clubId)}
+              title="Auto-fill mapping for the selected club in this division"
+            >
+              Auto-seed club
+            </button>
+            <button
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+              onClick={() => actions.autoSeed(divisionId)}
+              title="Auto-fill mapping for all clubs in this division"
+            >
+              Auto-seed all clubs
+            </button>
           </div>
         </div>
 

@@ -19,6 +19,7 @@ type Action =
   | { type: 'reset' }
   | { type: 'import'; state: TournamentStateV2 }
   | { type: 'player.update'; playerId: PlayerId; firstName: string; lastName: string }
+  | { type: 'division.autoseed'; divisionId: string; clubId?: ClubId }
   | {
       type: 'division.seed.set'
       divisionId: string
@@ -45,6 +46,41 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
         p.id === action.playerId ? { ...p, firstName: action.firstName, lastName: action.lastName } : p,
       )
       return touch({ ...state, players })
+    }
+    case 'division.autoseed': {
+      const divisionConfigs = state.divisionConfigs.map((dc) => {
+        if (dc.divisionId !== action.divisionId) return dc
+
+        const applyToClubIds = action.clubId ? [action.clubId] : state.clubs.map((c) => c.id)
+        const nextSeedsByClub = { ...dc.seedsByClub }
+
+        for (const clubId of applyToClubIds) {
+          const clubRecord = { ...nextSeedsByClub[clubId] }
+
+          const wid = (n: 1 | 2 | 3 | 4) => `${action.divisionId}:${clubId}:W${n}` as PlayerId
+          const mid = (n: 1 | 2 | 3 | 4) => `${action.divisionId}:${clubId}:M${n}` as PlayerId
+
+          // Women
+          clubRecord[seedKey('WOMENS_DOUBLES', 1)] = { playerIds: [wid(1), wid(2)] }
+          clubRecord[seedKey('WOMENS_DOUBLES', 2)] = { playerIds: [wid(3), wid(4)] }
+
+          // Men
+          clubRecord[seedKey('MENS_DOUBLES', 1)] = { playerIds: [mid(1), mid(2)] }
+          clubRecord[seedKey('MENS_DOUBLES', 2)] = { playerIds: [mid(3), mid(4)] }
+
+          // Mixed (UI expects [Woman, Man])
+          clubRecord[seedKey('MIXED_DOUBLES', 1)] = { playerIds: [wid(1), mid(1)] }
+          clubRecord[seedKey('MIXED_DOUBLES', 2)] = { playerIds: [wid(2), mid(2)] }
+          clubRecord[seedKey('MIXED_DOUBLES', 3)] = { playerIds: [wid(3), mid(3)] }
+          clubRecord[seedKey('MIXED_DOUBLES', 4)] = { playerIds: [wid(4), mid(4)] }
+
+          nextSeedsByClub[clubId] = clubRecord
+        }
+
+        return { ...dc, seedsByClub: nextSeedsByClub }
+      })
+
+      return touch({ ...state, divisionConfigs })
     }
     case 'division.seed.set': {
       const divisionConfigs = state.divisionConfigs.map((dc) => {
@@ -188,6 +224,7 @@ type Store = {
     reset(): void
     importState(state: TournamentStateV2): void
     updatePlayer(playerId: PlayerId, firstName: string, lastName: string): void
+    autoSeed(divisionId: string, clubId?: ClubId): void
     setSeed(
       divisionId: string,
       clubId: ClubId,
@@ -275,6 +312,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       reset: () => dispatch({ type: 'reset' }),
       importState: (s) => dispatch({ type: 'import', state: s }),
       updatePlayer: (playerId, firstName, lastName) => dispatch({ type: 'player.update', playerId, firstName, lastName }),
+      autoSeed: (divisionId, clubId) => dispatch({ type: 'division.autoseed', divisionId, clubId }),
       setSeed: (divisionId, clubId, eventType, seed, playerIds) =>
         dispatch({ type: 'division.seed.set', divisionId, clubId, eventType, seed, playerIds }),
       generateSchedule: () => dispatch({ type: 'schedule.generate' }),
