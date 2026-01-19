@@ -60,18 +60,19 @@ export function TvPage() {
 
       <div className="grid gap-3">
         <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Club Standings</h2>
-            <div className="text-sm text-slate-500">W-L • Diff</div>
-          </div>
-
           {/* 2-column layout; keep all standings in the LEFT column and leave the RIGHT column empty */}
           <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2">
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-2xl font-semibold">Club Standings</h2>
+                <div className="text-sm text-slate-500">W-L • Diff</div>
+              </div>
+
+              <div className="space-y-2">
               {clubStandings.map((row, idx) => (
                 <div
                   key={row.clubId}
-                  className="grid grid-cols-[40px_minmax(0,360px)_100px_80px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
+                  className="grid w-full grid-cols-[40px_minmax(0,1fr)_110px_90px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
                 >
                   <div className="text-center text-3xl font-bold text-slate-200">{idx + 1}</div>
                   <div className="min-w-0">
@@ -86,6 +87,7 @@ export function TvPage() {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
             <div />
           </div>
