@@ -254,19 +254,30 @@ export function ScoreEntryPage() {
   </body>
 </html>`
 
-    const w = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=700')
-    if (!w) {
-      alert('Pop-up blocked. Please allow pop-ups for printing.')
-      return
+    // Print via hidden iframe (avoids popup blockers).
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.style.border = '0'
+    iframe.style.opacity = '0'
+    iframe.setAttribute('aria-hidden', 'true')
+
+    iframe.onload = () => {
+      try {
+        iframe.contentWindow?.focus()
+        iframe.contentWindow?.print()
+      } finally {
+        // Give the print dialog a moment to open before cleanup.
+        setTimeout(() => iframe.remove(), 500)
+      }
     }
-    w.document.open()
-    w.document.write(html)
-    w.document.close()
-    w.focus()
-    setTimeout(() => {
-      w.print()
-      w.close()
-    }, 50)
+
+    // srcdoc is supported by modern browsers; this works on GitHub Pages without opening a new tab.
+    iframe.srcdoc = html
+    document.body.appendChild(iframe)
   }
 
   function headerButton(label: string, key: SortKey, alignRight = false) {

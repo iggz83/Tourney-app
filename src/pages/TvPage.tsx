@@ -58,14 +58,14 @@ export function TvPage() {
         Updated {new Date(state.updatedAt).toLocaleTimeString()}
       </div>
 
-      <div className="grid grid-cols-12 gap-3">
-        <section className="col-span-5 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+      <div className="grid gap-3">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-base font-semibold">Club Standings</h2>
             <div className="text-xs text-slate-500">W-L • Diff</div>
           </div>
 
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             {clubStandings.map((row, idx) => (
               <div
                 key={row.clubId}
@@ -91,7 +91,7 @@ export function TvPage() {
           </div>
         </section>
 
-        <section className="col-span-7 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-base font-semibold">Top Individuals</h2>
             <div className="text-xs text-slate-500">Top 3 Women + Top 3 Men per division</div>
