@@ -394,7 +394,16 @@ export function ScoreEntryPage() {
           </label>
           <button
             className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
-            onClick={() => actions.generateSchedule()}
+            onClick={() => {
+              if (
+                !confirm(
+                  'Regenerate schedule?\n\nThis will DELETE the current schedule and CLEAR ALL SCORES.\nUse this if you want to start over.\n\nContinue?',
+                )
+              )
+                return
+              actions.regenerateSchedule()
+              setDrafts({})
+            }}
           >
             Generate schedule
           </button>

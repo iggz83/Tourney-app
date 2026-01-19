@@ -40,6 +40,7 @@ type Action =
       playerIds: [PlayerId | null, PlayerId | null]
     }
   | { type: 'schedule.generate' }
+  | { type: 'schedule.regenerate' }
   | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number] }
   | { type: 'matches.scores.clearAll' }
   | { type: 'match.unlock'; matchId: MatchId }
@@ -200,6 +201,11 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
         return prev?.score ? { ...m, score: prev.score, completedAt: prev.completedAt } : m
       })
       return touch({ ...state, matches: merged })
+    }
+    case 'schedule.regenerate': {
+      // Hard reset: replace schedule and drop all scores.
+      const nextMatches = generateSchedule(state)
+      return touch({ ...state, matches: nextMatches })
     }
     case 'matches.upsert': {
       const incoming = action.match
@@ -365,6 +371,7 @@ type Store = {
       playerIds: [PlayerId | null, PlayerId | null],
     ): void
     generateSchedule(): void
+    regenerateSchedule(): void
     setScore(matchId: MatchId, score?: { a: number; b: number }): void
     exportJson(): string
   }
@@ -584,6 +591,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       setSeed: (divisionId, clubId, eventType, seed, playerIds) =>
         dispatch({ type: 'division.seed.set', divisionId, clubId, eventType, seed, playerIds }),
       generateSchedule: () => dispatch({ type: 'schedule.generate' }),
+      regenerateSchedule: () => dispatch({ type: 'schedule.regenerate' }),
       setScore: (matchId, score) => dispatch({ type: 'match.score.set', matchId, score }),
       exportJson: () => JSON.stringify(state, null, 2),
     }
