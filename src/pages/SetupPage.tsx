@@ -157,30 +157,6 @@ export function SetupPage() {
         </div>
       </div>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold">Club Directory</h2>
-          <p className="text-sm text-slate-400">Set the full club names (TV view uses full names).</p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {state.clubs.map((c) => (
-            <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-100">{c.code}</div>
-                <div className="text-xs text-slate-500">acronym</div>
-              </div>
-              <label className="block text-xs font-semibold text-slate-400">Full name</label>
-              <CommitInput
-                className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
-                placeholder="e.g. North Pickleball Club"
-                value={c.name}
-                onCommit={(next) => actions.setClubName(c.id, next)}
-              />
-            </div>
-          ))}
-        </div>
-      </section>
-
       <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -295,6 +271,32 @@ export function SetupPage() {
           </div>
         </div>
       </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">Club Directory</h2>
+          <p className="text-sm text-slate-400">Set the full club names (TV view uses full names).</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {state.clubs.map((c) => (
+            <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-100">{c.code}</div>
+                <div className="text-xs text-slate-500">acronym</div>
+              </div>
+              <label className="block text-xs font-semibold text-slate-400">Full name</label>
+              <CommitInput
+                className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
+                placeholder="e.g. North Pickleball Club"
+                value={c.name}
+                onCommit={(next) => actions.setClubName(c.id, next)}
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      
 
       {pickerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
