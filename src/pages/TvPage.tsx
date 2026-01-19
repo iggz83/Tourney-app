@@ -65,7 +65,8 @@ export function TvPage() {
             <div className="text-sm text-slate-500">W-L • Diff</div>
           </div>
 
-          <div className="max-w-[980px] space-y-2">
+          {/* Keep Club Standings rows to ~half the screen width so it visually aligns with the 2-column performers layout */}
+          <div className="w-full max-w-[50vw] space-y-2">
             {clubStandings.map((row, idx) => (
               <div
                 key={row.clubId}
