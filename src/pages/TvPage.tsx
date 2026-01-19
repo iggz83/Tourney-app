@@ -65,26 +65,29 @@ export function TvPage() {
             <div className="text-sm text-slate-500">W-L • Diff</div>
           </div>
 
-          {/* Keep Club Standings rows to ~half the screen width so it visually aligns with the 2-column performers layout */}
-          <div className="w-full max-w-[50vw] space-y-2">
-            {clubStandings.map((row, idx) => (
-              <div
-                key={row.clubId}
-                className="grid grid-cols-[40px_minmax(0,520px)_100px_80px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
-              >
-                <div className="text-center text-3xl font-bold text-slate-200">{idx + 1}</div>
-                <div className="min-w-0">
-                  <div className="truncate text-3xl font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
+          {/* 2-column layout; keep all standings in the LEFT column and leave the RIGHT column empty */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              {clubStandings.map((row, idx) => (
+                <div
+                  key={row.clubId}
+                  className="grid grid-cols-[40px_minmax(0,360px)_100px_80px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
+                >
+                  <div className="text-center text-3xl font-bold text-slate-200">{idx + 1}</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-3xl font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
+                  </div>
+                  <div className="text-right tabular-nums text-3xl font-bold">
+                    {row.wins}
+                    <span className="text-slate-500">-{row.losses}</span>
+                  </div>
+                  <div className="text-right tabular-nums text-2xl font-semibold text-slate-200 whitespace-nowrap">
+                    {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
+                  </div>
                 </div>
-                <div className="text-right tabular-nums text-3xl font-bold">
-                  {row.wins}
-                  <span className="text-slate-500">-{row.losses}</span>
-                </div>
-                <div className="text-right tabular-nums text-2xl font-semibold text-slate-200 whitespace-nowrap">
-                  {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div />
           </div>
         </section>
 
