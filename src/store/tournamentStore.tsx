@@ -212,9 +212,12 @@ function loadState(): TournamentStateV2 {
     const rawV1 = localStorage.getItem(STORAGE_KEY_V1)
     if (rawV1) return parseAndNormalize(rawV1) ?? createInitialTournamentState()
 
-    return createInitialTournamentState()
+    // Important for cloud sync: a brand-new browser (incognito / new device) should not
+    // "win" against an existing cloud tournament just because it was created later.
+    // Use epoch so any real tournament state (with real edits) will be newer.
+    return { ...createInitialTournamentState(), updatedAt: new Date(0).toISOString() }
   } catch {
-    return createInitialTournamentState()
+    return { ...createInitialTournamentState(), updatedAt: new Date(0).toISOString() }
   }
 }
 
