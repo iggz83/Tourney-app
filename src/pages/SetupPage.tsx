@@ -4,7 +4,14 @@ import { seedKey } from '../domain/keys'
 import { useMemo, useState } from 'react'
 import { useTournamentStore } from '../store/tournamentStore'
 import { normalizeTournamentState } from '../store/tournamentStore'
-import { ensureTournamentIdInUrl, getTournamentIdFromUrl, shouldEnableCloudSync } from '../store/cloudSync'
+import {
+  clearTournamentIdFromUrl,
+  ensureTournamentIdInUrl,
+  getTournamentIdFromUrl,
+  setTournamentIdInUrl,
+  shouldEnableCloudSync,
+} from '../store/cloudSync'
+import { deleteTournament, listTournaments, type TournamentListItem } from '../store/cloudSync'
 
 function playerLabel(p: { firstName: string; lastName: string }) {
   const full = `${p.firstName} ${p.lastName}`.trim()
@@ -29,6 +36,10 @@ export function SetupPage() {
   const [clubId, setClubId] = useState<ClubId>(state.clubs[0]?.id ?? 'NPC')
   const [importError, setImportError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerLoading, setPickerLoading] = useState(false)
+  const [pickerError, setPickerError] = useState<string | null>(null)
+  const [tournaments, setTournaments] = useState<TournamentListItem[]>([])
 
   const playersForClub = useMemo(
     () => state.players.filter((p) => p.clubId === clubId && p.divisionId === divisionId),
@@ -152,9 +163,105 @@ export function SetupPage() {
             >
               {copied ? 'Copied!' : 'Copy link'}
             </button>
+            <button
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+              onClick={async () => {
+                setPickerOpen(true)
+                setPickerError(null)
+                setPickerLoading(true)
+                try {
+                  const rows = await listTournaments(50)
+                  setTournaments(rows)
+                } catch (e) {
+                  setPickerError(e instanceof Error ? e.message : 'Failed to load tournaments')
+                } finally {
+                  setPickerLoading(false)
+                }
+              }}
+            >
+              Load / Delete…
+            </button>
           </div>
         </div>
       </section>
+
+      {pickerOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-100">Tournaments</div>
+                <div className="text-xs text-slate-400">Load an existing tournament or delete it (delete is permanent).</div>
+              </div>
+              <button
+                className="rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-900 hover:text-white"
+                onClick={() => setPickerOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="p-4">
+              {pickerError ? (
+                <div className="mb-3 rounded-lg border border-red-900/50 bg-red-950/40 p-3 text-sm text-red-200">
+                  {pickerError}
+                </div>
+              ) : null}
+              {pickerLoading ? (
+                <div className="text-sm text-slate-300">Loading…</div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-slate-800">
+                  <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+                    <div className="col-span-5">Tournament ID</div>
+                    <div className="col-span-3">Updated</div>
+                    <div className="col-span-4 text-right">Actions</div>
+                  </div>
+                  <div className="divide-y divide-slate-800 bg-slate-950/30">
+                    {tournaments.map((t) => (
+                      <div key={t.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
+                        <div className="col-span-5 font-mono text-xs text-slate-200">{t.id}</div>
+                        <div className="col-span-3 text-xs text-slate-400">{new Date(t.updated_at).toLocaleString()}</div>
+                        <div className="col-span-4 flex justify-end gap-2">
+                          <button
+                            className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium hover:bg-slate-700"
+                            onClick={() => {
+                              setTournamentIdInUrl(t.id)
+                              window.location.reload()
+                            }}
+                          >
+                            Load
+                          </button>
+                          <button
+                            className="rounded-md border border-red-900/60 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-950/40"
+                            onClick={async () => {
+                              if (!confirm(`Delete tournament ${t.id}? This cannot be undone.`)) return
+                              try {
+                                await deleteTournament(t.id)
+                                setTournaments((prev) => prev.filter((x) => x.id !== t.id))
+                                if (getTournamentIdFromUrl() === t.id) {
+                                  actions.reset()
+                                  clearTournamentIdFromUrl()
+                                  window.location.reload()
+                                }
+                              } catch (e) {
+                                alert(e instanceof Error ? e.message : 'Delete failed')
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {tournaments.length === 0 ? (
+                      <div className="px-3 py-6 text-sm text-slate-400">No tournaments found.</div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {importError ? (
         <div className="rounded-lg border border-red-900/50 bg-red-950/40 p-3 text-sm text-red-200">

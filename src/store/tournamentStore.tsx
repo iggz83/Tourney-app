@@ -7,10 +7,14 @@ import {
   connectCloudSync,
   ensureTournamentRow,
   ensureTournamentIdInUrl,
-  fetchTournamentState,
+  fetchTournamentCoreState,
+  fetchTournamentMatches,
   getTournamentIdFromUrl,
+  setTournamentMatchScore,
   shouldEnableCloudSync,
   type CloudSyncStatus,
+  upsertTournamentCoreState,
+  upsertTournamentMatches,
 } from './cloudSync'
 
 const STORAGE_KEY_V2 = 'ictpt_state_v2'
@@ -252,6 +256,10 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   const connRef = useRef<ReturnType<typeof connectCloudSync> | null>(null)
   const stateUpdatedAtRef = useRef<string>(state.updatedAt)
   const stateRef = useRef<TournamentStateV2>(state)
+  const tidRef = useRef<string | null>(null)
+  const prevCoreSigRef = useRef<string | null>(null)
+  const prevScheduleSigRef = useRef<string | null>(null)
+  const prevScoresRef = useRef<Map<string, string>>(new Map())
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(state))
@@ -272,6 +280,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     let cancelled = false
     const tidFromUrl = getTournamentIdFromUrl()
     const tid = tidFromUrl ?? ensureTournamentIdInUrl()
+    tidRef.current = tid
 
     ;(async () => {
       try {
@@ -280,11 +289,25 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         const conn = connectCloudSync({
           tid,
           onStatus: setSyncStatus,
-          onRemoteState: (remote) => {
-            // last-write-wins
+          onRemoteCoreState: (remote) => {
+            // last-write-wins for core config
             if (remote.updatedAt && stateUpdatedAtRef.current && remote.updatedAt <= stateUpdatedAtRef.current) return
             isApplyingRemote.current = true
-            dispatch({ type: 'import', state: remote })
+            // Preserve current match scores (they come from match rows)
+            const merged: TournamentStateV2 = { ...remote, matches: stateRef.current.matches }
+            dispatch({ type: 'import', state: merged })
+            setTimeout(() => {
+              isApplyingRemote.current = false
+            }, 0)
+          },
+          onRemoteMatchChange: (m) => {
+            // Apply match row changes into local matches array
+            isApplyingRemote.current = true
+            const current = stateRef.current
+            const matches = current.matches.some((x) => x.id === m.id)
+              ? current.matches.map((x) => (x.id === m.id ? { ...x, ...m } : x))
+              : [...current.matches, m]
+            dispatch({ type: 'import', state: { ...current, matches, updatedAt: new Date().toISOString() } })
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -292,22 +315,35 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         })
         connRef.current = conn
 
-        // Load existing tournament state (if any). If none exists yet, initialize the row with our current local state.
+        // Load core + match rows. If core is missing, initialize it from local.
         try {
-          const remote = await fetchTournamentState(tid)
+          const remoteCore = await fetchTournamentCoreState(tid)
+          const remoteMatches = await fetchTournamentMatches(tid)
           if (cancelled) return
           const local = stateRef.current
-          if (remote && remote.updatedAt && local.updatedAt && remote.updatedAt > local.updatedAt) {
-            isApplyingRemote.current = true
-            dispatch({ type: 'import', state: remote })
-            setTimeout(() => {
-              isApplyingRemote.current = false
-            }, 0)
-          } else {
-            // Remote is missing or older than local — ensure cloud has the latest local state.
-            // This also covers the case where the user made changes before the connection was established.
-            // eslint-disable-next-line no-void
-            void conn.pushState(local)
+
+          // Choose core: newer wins (incognito starts at epoch so remote should win).
+          const useRemoteCore =
+            !!remoteCore && !!remoteCore.updatedAt && !!local.updatedAt && remoteCore.updatedAt > local.updatedAt
+          const chosenCore = (useRemoteCore ? remoteCore : local) ?? local
+
+          // Choose matches: if remote has any matches, prefer them (scores are authoritative there).
+          const chosenMatches = remoteMatches.length > 0 ? remoteMatches : local.matches
+
+          isApplyingRemote.current = true
+          dispatch({ type: 'import', state: { ...chosenCore, matches: chosenMatches } })
+          setTimeout(() => {
+            isApplyingRemote.current = false
+          }, 0)
+
+          // Ensure cloud has core; if remote core is missing, push local core.
+          if (!remoteCore) {
+            void upsertTournamentCoreState(tid, { ...local, matches: [] })
+          }
+
+          // Ensure cloud has schedule rows; if remote matches are missing but local has them, push.
+          if (remoteMatches.length === 0 && local.matches.length > 0) {
+            void upsertTournamentMatches(tid, local.matches)
           }
         } catch {
           // ignore fetch/init issues; realtime may still work
@@ -321,20 +357,74 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       cancelled = true
       connRef.current?.close()
       connRef.current = null
+      tidRef.current = null
     }
     // Intentionally do not include `state` in deps; connection lifetime is per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Push local changes to sync server (debounced by updatedAt)
+  function coreSignature(s: TournamentStateV2) {
+    return JSON.stringify({ clubs: s.clubs, divisions: s.divisions, players: s.players, divisionConfigs: s.divisionConfigs })
+  }
+
+  function scheduleSignature(matches: TournamentStateV2['matches']) {
+    const stripped = matches
+      .map((m) => ({
+        id: m.id,
+        divisionId: m.divisionId,
+        round: m.round,
+        matchupIndex: m.matchupIndex,
+        eventType: m.eventType,
+        seed: m.seed,
+        court: m.court,
+        clubA: m.clubA,
+        clubB: m.clubB,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+    return JSON.stringify(stripped)
+  }
+
+  function scoreSignature(m: TournamentStateV2['matches'][number]) {
+    if (!m.score) return ''
+    return `${m.score.a}-${m.score.b}`
+  }
+
+  // Push local changes to Supabase: core config separately from match rows & scores.
   useEffect(() => {
     if (!shouldEnableCloudSync()) return
     if (isApplyingRemote.current) return
     if (lastSentAt.current === state.updatedAt) return
     lastSentAt.current = state.updatedAt
+    const tid = tidRef.current
+    if (!tid) return
 
-    // Fire-and-forget
-    void connRef.current?.pushState(state)
+    // Core config updates
+    const coreSig = coreSignature(state)
+    if (prevCoreSigRef.current !== coreSig) {
+      prevCoreSigRef.current = coreSig
+      // keep cloud core small; matches are in tournament_matches
+      void upsertTournamentCoreState(tid, { ...state, matches: [] })
+    }
+
+    // Schedule updates (upsert all matches when schedule structure changes)
+    const schedSig = scheduleSignature(state.matches)
+    if (prevScheduleSigRef.current !== schedSig) {
+      prevScheduleSigRef.current = schedSig
+      void upsertTournamentMatches(tid, state.matches)
+    }
+
+    // Score updates (per match row)
+    const prevScores = prevScoresRef.current
+    const nextScores = new Map<string, string>()
+    for (const m of state.matches) {
+      const sig = scoreSignature(m)
+      nextScores.set(m.id, sig)
+      const prev = prevScores.get(m.id) ?? ''
+      if (prev !== sig) {
+        void setTournamentMatchScore({ tid, matchId: m.id, score: m.score })
+      }
+    }
+    prevScoresRef.current = nextScores
   }, [state])
 
   const actions = useMemo<Store['actions']>(() => {

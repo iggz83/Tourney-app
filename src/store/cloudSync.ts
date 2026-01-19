@@ -1,8 +1,14 @@
-import type { TournamentStateV2 } from '../domain/types'
+import type { Match, TournamentStateV2 } from '../domain/types'
 import { normalizeTournamentState } from './tournamentStore'
 import { supabase } from './supabaseClient'
 
 export type CloudSyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
+
+export type TournamentListItem = {
+  id: string
+  created_at: string
+  updated_at: string
+}
 
 export function getTournamentIdFromUrl(): string | null {
   // Supports both:
@@ -34,6 +40,23 @@ export function setTournamentIdInUrl(tid: string) {
 
   // Otherwise set it as normal query param.
   u.searchParams.set('tid', tid)
+  window.history.replaceState({}, '', u.toString())
+}
+
+export function clearTournamentIdFromUrl() {
+  const u = new URL(window.location.href)
+  u.searchParams.delete('tid')
+  u.searchParams.delete('cloud')
+
+  if (u.hash.includes('#/')) {
+    const [pathPart, queryPart] = u.hash.split('?')
+    const sp = new URLSearchParams(queryPart ?? '')
+    sp.delete('tid')
+    sp.delete('cloud')
+    const qs = sp.toString()
+    u.hash = qs ? `${pathPart}?${qs}` : pathPart
+  }
+
   window.history.replaceState({}, '', u.toString())
 }
 
@@ -69,25 +92,134 @@ export async function ensureTournamentRow(tid: string) {
   if (insErr) throw insErr
 }
 
-export async function fetchTournamentState(tid: string): Promise<TournamentStateV2 | null> {
+export async function fetchTournamentCoreState(tid: string): Promise<TournamentStateV2 | null> {
   if (!supabase) throw new Error('Supabase not configured')
   const { data, error } = await supabase.from('tournaments').select('state').eq('id', tid).maybeSingle()
   if (error) throw error
   return normalizeTournamentState(data?.state ?? null)
 }
 
+export async function listTournaments(limit = 25): Promise<TournamentListItem[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('id,created_at,updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as TournamentListItem[]
+}
+
+export async function deleteTournament(tid: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.from('tournaments').delete().eq('id', tid)
+  if (error) throw error
+}
+
+type MatchRow = {
+  tournament_id: string
+  match_id: string
+  division_id: string
+  round: number
+  matchup_index: number
+  event_type: string
+  seed: number
+  court: number
+  club_a: string
+  club_b: string
+  score_a: number | null
+  score_b: number | null
+  completed_at: string | null
+  updated_at: string
+}
+
+export async function fetchTournamentMatches(tid: string): Promise<Match[]> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase
+    .from('tournament_matches')
+    .select(
+      'tournament_id,match_id,division_id,round,matchup_index,event_type,seed,court,club_a,club_b,score_a,score_b,completed_at,updated_at',
+    )
+    .eq('tournament_id', tid)
+  if (error) throw error
+  const rows = (data ?? []) as MatchRow[]
+  return rows.map((r) => {
+    const score = r.score_a == null || r.score_b == null ? undefined : { a: r.score_a, b: r.score_b }
+    return {
+      id: r.match_id,
+      divisionId: r.division_id,
+      round: r.round as 1 | 2 | 3,
+      matchupIndex: r.matchup_index as 0 | 1,
+      eventType: r.event_type as Match['eventType'],
+      seed: r.seed,
+      court: r.court,
+      clubA: r.club_a as Match['clubA'],
+      clubB: r.club_b as Match['clubB'],
+      score,
+      completedAt: r.completed_at ?? undefined,
+    }
+  })
+}
+
+export async function upsertTournamentCoreState(tid: string, core: TournamentStateV2): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.from('tournaments').update({ state: core }).eq('id', tid)
+  if (error) throw error
+}
+
+export async function upsertTournamentMatches(tid: string, matches: Match[]): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  if (matches.length === 0) return
+  const payload = matches.map((m) => ({
+    tournament_id: tid,
+    match_id: m.id,
+    division_id: m.divisionId,
+    round: m.round,
+    matchup_index: m.matchupIndex,
+    event_type: m.eventType,
+    seed: m.seed,
+    court: m.court,
+    club_a: m.clubA,
+    club_b: m.clubB,
+    score_a: m.score?.a ?? null,
+    score_b: m.score?.b ?? null,
+    completed_at: m.completedAt ?? null,
+  }))
+  const { error } = await supabase.from('tournament_matches').upsert(payload, { onConflict: 'tournament_id,match_id' })
+  if (error) throw error
+}
+
+export async function setTournamentMatchScore(args: {
+  tid: string
+  matchId: string
+  score?: { a: number; b: number }
+}): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { tid, matchId, score } = args
+  const update = score
+    ? { score_a: score.a, score_b: score.b, completed_at: new Date().toISOString() }
+    : { score_a: null, score_b: null, completed_at: null }
+
+  const { error } = await supabase
+    .from('tournament_matches')
+    .update(update)
+    .eq('tournament_id', tid)
+    .eq('match_id', matchId)
+  if (error) throw error
+}
+
 export function connectCloudSync(args: {
   tid: string
   onStatus: (s: CloudSyncStatus) => void
-  onRemoteState: (s: TournamentStateV2) => void
-}): { pushState: (s: TournamentStateV2) => Promise<void>; close: () => void } {
-  const { tid, onStatus, onRemoteState } = args
+  onRemoteCoreState: (s: TournamentStateV2) => void
+  onRemoteMatchChange: (m: Match) => void
+}): { close: () => void } {
+  const { tid, onStatus, onRemoteCoreState, onRemoteMatchChange } = args
 
   const sb = supabase
   if (!sb) {
     onStatus('disabled')
     return {
-      pushState: async () => {},
       close: () => {},
     }
   }
@@ -102,7 +234,30 @@ export function connectCloudSync(args: {
       (payload) => {
         const next = (payload.new as any)?.state
         const normalized = normalizeTournamentState(next)
-        if (normalized) onRemoteState(normalized)
+        if (normalized) onRemoteCoreState(normalized)
+      },
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${tid}` },
+      (payload) => {
+        const r = payload.new as any
+        if (!r) return
+        const score = r.score_a == null || r.score_b == null ? undefined : { a: r.score_a, b: r.score_b }
+        const m: Match = {
+          id: r.match_id,
+          divisionId: r.division_id,
+          round: r.round,
+          matchupIndex: r.matchup_index,
+          eventType: r.event_type,
+          seed: r.seed,
+          court: r.court,
+          clubA: r.club_a,
+          clubB: r.club_b,
+          score,
+          completedAt: r.completed_at ?? undefined,
+        }
+        onRemoteMatchChange(m)
       },
     )
     .subscribe((status) => {
@@ -111,14 +266,6 @@ export function connectCloudSync(args: {
     })
 
   return {
-    pushState: async (s) => {
-      // Store state JSON into the row; updatedAt is inside state and drives last-write-wins.
-      const { error } = await sb
-        .from('tournaments')
-        .update({ state: s, updated_at: new Date().toISOString() })
-        .eq('id', tid)
-      if (error) throw error
-    },
     close: () => {
       sb.removeChannel(channel)
     },
