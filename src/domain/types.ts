@@ -1,5 +1,9 @@
-export type ClubCode = 'NPC' | 'IPG' | 'PR' | 'PUP'
-export type ClubId = ClubCode
+/**
+ * Clubs are user-defined. We use a short acronym-like id (e.g. "NPC") as the stable identifier.
+ * This was previously a fixed union ('NPC' | 'IPG' | 'PR' | 'PUP').
+ */
+export type ClubId = string
+export type ClubCode = string
 export type DivisionId = string
 export type PlayerId = string
 export type MatchId = string
@@ -51,6 +55,12 @@ export interface DivisionConfig {
   divisionId: DivisionId
   /** Per-club seed assignments for this division (e.g. Women #1 pair, Mixed #3 pair, etc.) */
   seedsByClub: Record<ClubId, Record<SeedKey, SeedAssignment>>
+  /**
+   * Per-division participation toggle.
+   * If a club is false here, it is considered "no team for this division" and excluded from schedule generation.
+   * Missing keys default to true.
+   */
+  clubEnabled?: Record<ClubId, boolean>
 }
 
 export interface MatchScore {
@@ -61,10 +71,11 @@ export interface MatchScore {
 export interface Match {
   id: MatchId
   divisionId: DivisionId
-  round: 1 | 2 | 3
-  matchupIndex: 0 | 1
+  round: number
+  matchupIndex: number
   eventType: EventType
   seed: number
+  /** 0 means "unassigned" (printouts can be filled manually) */
   court: number
   clubA: ClubId
   clubB: ClubId

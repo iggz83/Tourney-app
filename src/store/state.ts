@@ -41,7 +41,9 @@ function createEmptyDivisionConfig(divisionId: string): DivisionConfig {
     }
     seedsByClub[club.id] = record
   }
-  return { divisionId, seedsByClub }
+  const clubEnabled: Record<string, boolean> = {}
+  for (const club of CLUBS) clubEnabled[club.id] = true
+  return { divisionId, seedsByClub, clubEnabled }
 }
 
 export function createInitialTournamentState(): TournamentStateV2 {

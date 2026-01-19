@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { generateSchedule } from '../domain/scheduler'
+import { SEEDED_EVENTS } from '../domain/constants'
 import { seedKey } from '../domain/keys'
 import type { ClubId, EventType, MatchId, PlayerId, TournamentState, TournamentStateV1, TournamentStateV2 } from '../domain/types'
 import { createInitialTournamentState } from './state'
@@ -24,9 +25,12 @@ const STORAGE_KEY_V1 = 'ictpt_state_v1'
 type Action =
   | { type: 'reset' }
   | { type: 'import'; state: TournamentStateV2 }
+  | { type: 'club.add'; clubId: ClubId; name: string }
+  | { type: 'club.remove'; clubId: ClubId }
   | { type: 'club.name.set'; clubId: ClubId; name: string }
   | { type: 'player.update'; playerId: PlayerId; firstName: string; lastName: string }
   | { type: 'division.autoseed'; divisionId: string; clubId?: ClubId }
+  | { type: 'division.club.enabled.set'; divisionId: string; clubId: ClubId; enabled: boolean }
   | {
       type: 'division.seed.set'
       divisionId: string
@@ -51,6 +55,69 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return createInitialTournamentState()
     case 'import':
       return touch(action.state)
+    case 'club.add': {
+      const clubId = action.clubId.trim()
+      if (!clubId.length) return state
+      if (state.clubs.some((c) => c.id === clubId)) return state
+
+      const clubs = [...state.clubs, { id: clubId, code: clubId, name: action.name || clubId }]
+
+      // Add default roster slots (4W/4M) per division for this new club.
+      const players = [...state.players]
+      for (const division of state.divisions) {
+        for (let i = 1; i <= 4; i++) {
+          players.push({
+            id: `${division.id}:${clubId}:W${i}`,
+            clubId,
+            divisionId: division.id,
+            gender: 'F',
+            firstName: clubId,
+            lastName: `${division.code} Woman ${i}`,
+          })
+        }
+        for (let i = 1; i <= 4; i++) {
+          players.push({
+            id: `${division.id}:${clubId}:M${i}`,
+            clubId,
+            divisionId: division.id,
+            gender: 'M',
+            firstName: clubId,
+            lastName: `${division.code} Man ${i}`,
+          })
+        }
+      }
+
+      // Extend division configs with empty seed mappings + enabled flag.
+      const divisionConfigs = state.divisionConfigs.map((dc) => {
+        if (dc.seedsByClub[clubId]) return dc
+        const clubRecord: Record<string, { playerIds: [PlayerId | null, PlayerId | null] }> = {}
+        for (const ev of SEEDED_EVENTS) {
+          clubRecord[seedKey(ev.eventType, ev.seed)] = { playerIds: [null, null] }
+        }
+        return {
+          ...dc,
+          seedsByClub: { ...dc.seedsByClub, [clubId]: clubRecord },
+          clubEnabled: { ...(dc.clubEnabled ?? {}), [clubId]: true },
+        }
+      })
+
+      // Remove any existing matches (schedule depends on club set); keep scores table clean.
+      const matches = state.matches.filter((m) => m.clubA !== clubId && m.clubB !== clubId)
+      return touch({ ...state, clubs, players, divisionConfigs, matches })
+    }
+    case 'club.remove': {
+      const clubId = action.clubId
+      const clubs = state.clubs.filter((c) => c.id !== clubId)
+      const players = state.players.filter((p) => p.clubId !== clubId)
+      const divisionConfigs = state.divisionConfigs.map((dc) => {
+        const { [clubId]: _, ...restSeeds } = dc.seedsByClub as Record<string, any>
+        const enabled = { ...(dc.clubEnabled ?? {}) }
+        delete enabled[clubId]
+        return { ...dc, seedsByClub: restSeeds, clubEnabled: enabled }
+      })
+      const matches = state.matches.filter((m) => m.clubA !== clubId && m.clubB !== clubId)
+      return touch({ ...state, clubs, players, divisionConfigs, matches })
+    }
     case 'club.name.set': {
       const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, name: action.name } : c))
       return touch({ ...state, clubs })
@@ -96,6 +163,16 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
 
       return touch({ ...state, divisionConfigs })
     }
+    case 'division.club.enabled.set': {
+      const divisionConfigs = state.divisionConfigs.map((dc) => {
+        if (dc.divisionId !== action.divisionId) return dc
+        return {
+          ...dc,
+          clubEnabled: { ...(dc.clubEnabled ?? {}), [action.clubId]: action.enabled },
+        }
+      })
+      return touch({ ...state, divisionConfigs })
+    }
     case 'division.seed.set': {
       const divisionConfigs = state.divisionConfigs.map((dc) => {
         if (dc.divisionId !== action.divisionId) return dc
@@ -134,12 +211,11 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
             return {
               ...x,
               divisionId: incoming.divisionId ? incoming.divisionId : x.divisionId,
-              round: incoming.round === 1 || incoming.round === 2 || incoming.round === 3 ? incoming.round : x.round,
-              matchupIndex:
-                incoming.matchupIndex === 0 || incoming.matchupIndex === 1 ? incoming.matchupIndex : x.matchupIndex,
+              round: Number.isFinite(incoming.round) ? incoming.round : x.round,
+              matchupIndex: Number.isFinite(incoming.matchupIndex) ? incoming.matchupIndex : x.matchupIndex,
               eventType: incoming.eventType ? incoming.eventType : x.eventType,
               seed: incoming.seed > 0 ? incoming.seed : x.seed,
-              court: incoming.court > 0 ? incoming.court : x.court,
+              court: Number.isFinite(incoming.court) ? incoming.court : x.court,
               clubA: incoming.clubA ? incoming.clubA : x.clubA,
               clubB: incoming.clubB ? incoming.clubB : x.clubB,
               score: incoming.score,
@@ -273,7 +349,10 @@ type Store = {
   actions: {
     reset(): void
     importState(state: TournamentStateV2): void
+    addClub(clubId: ClubId, name: string): void
+    removeClub(clubId: ClubId): void
     setClubName(clubId: ClubId, name: string): void
+    setDivisionClubEnabled(divisionId: string, clubId: ClubId, enabled: boolean): void
     updatePlayer(playerId: PlayerId, firstName: string, lastName: string): void
     autoSeed(divisionId: string, clubId?: ClubId): void
     unlockMatch(matchId: MatchId): void
@@ -493,7 +572,11 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     return {
       reset: () => dispatch({ type: 'reset' }),
       importState: (s) => dispatch({ type: 'import', state: s }),
+      addClub: (clubId, name) => dispatch({ type: 'club.add', clubId, name }),
+      removeClub: (clubId) => dispatch({ type: 'club.remove', clubId }),
       setClubName: (clubId, name) => dispatch({ type: 'club.name.set', clubId, name }),
+      setDivisionClubEnabled: (divisionId, clubId, enabled) =>
+        dispatch({ type: 'division.club.enabled.set', divisionId, clubId, enabled }),
       updatePlayer: (playerId, firstName, lastName) => dispatch({ type: 'player.update', playerId, firstName, lastName }),
       autoSeed: (divisionId, clubId) => dispatch({ type: 'division.autoseed', divisionId, clubId }),
       unlockMatch: (matchId) => dispatch({ type: 'match.unlock', matchId }),

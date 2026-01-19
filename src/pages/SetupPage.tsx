@@ -51,7 +51,7 @@ function download(filename: string, text: string) {
 export function SetupPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState(state.divisions[0]?.id ?? SKILL_DIVISIONS[0].id)
-  const [clubId, setClubId] = useState<ClubId>(state.clubs[0]?.id ?? 'NPC')
+  const [clubId, setClubId] = useState<ClubId>(state.clubs[0]?.id ?? '')
   const [importError, setImportError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -59,6 +59,8 @@ export function SetupPage() {
   const [pickerError, setPickerError] = useState<string | null>(null)
   const [tournaments, setTournaments] = useState<TournamentListItem[]>([])
   const [tournamentName, setTournamentName] = useState<string>('')
+  const [newClubCode, setNewClubCode] = useState<string>('')
+  const [newClubName, setNewClubName] = useState<string>('')
   const prevTidRef = useRef<string | null>(null)
 
   const playersForClub = useMemo(
@@ -75,6 +77,14 @@ export function SetupPage() {
 
   const tid = getTournamentIdFromUrl()
   const cloudEnabled = shouldEnableCloudSync()
+
+  // Keep selected club valid if clubs list changes (add/remove).
+  useEffect(() => {
+    if (clubId && state.clubs.some((c) => c.id === clubId)) return
+    setClubId(state.clubs[0]?.id ?? '')
+  }, [clubId, state.clubs])
+
+  const clubEnabledForDivision = (cid: ClubId) => (divisionConfig?.clubEnabled?.[cid] ?? true) !== false
 
   useEffect(() => {
     if (!cloudEnabled || !tid) return
@@ -282,7 +292,16 @@ export function SetupPage() {
             <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-sm font-semibold text-slate-100">{c.code}</div>
-                <div className="text-xs text-slate-500">acronym</div>
+                 <button
+                   className="rounded-md border border-red-900/60 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-950/40"
+                   onClick={() => {
+                     if (!confirm(`Remove club ${c.id}?\n\nThis will remove its roster, mappings, and any matches involving it.`)) return
+                     actions.removeClub(c.id)
+                   }}
+                   title="Remove club"
+                 >
+                   Remove
+                 </button>
               </div>
               <label className="block text-xs font-semibold text-slate-400">Full name</label>
               <CommitInput
@@ -294,6 +313,43 @@ export function SetupPage() {
             </div>
           ))}
         </div>
+
+         <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
+           <div className="mb-2 text-sm font-semibold text-slate-100">Add club</div>
+           <div className="grid gap-2 md:grid-cols-3">
+             <input
+               className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600"
+               placeholder="Acronym (e.g. ABC)"
+               value={newClubCode}
+               onChange={(e) => setNewClubCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+             />
+             <input
+               className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600"
+               placeholder="Full name (optional)"
+               value={newClubName}
+               onChange={(e) => setNewClubName(e.target.value)}
+             />
+             <button
+               className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
+               disabled={!newClubCode.trim().length}
+               onClick={() => {
+                 const code = newClubCode.trim()
+                 if (!code) return
+                 if (state.clubs.some((c) => c.id === code)) {
+                   alert(`Club ${code} already exists.`)
+                   return
+                 }
+                 actions.addClub(code, newClubName.trim() || code)
+                 setNewClubCode('')
+                 setNewClubName('')
+                 setClubId(code)
+               }}
+             >
+               Add
+             </button>
+           </div>
+           <div className="mt-2 text-xs text-slate-500">Tip: use a short unique acronym; it becomes the club id.</div>
+         </div>
       </section>
 
       
@@ -414,6 +470,7 @@ export function SetupPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {state.clubs.map((club) => {
+            const enabled = clubEnabledForDivision(club.id)
             const players = state.players
               .filter((p) => p.clubId === club.id && p.divisionId === divisionId)
               .slice()
@@ -422,8 +479,23 @@ export function SetupPage() {
               <div key={club.id} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="text-sm font-semibold">{club.name}</div>
-                  <div className="text-xs text-slate-400">{players.length} players</div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={enabled}
+                        onChange={(e) => actions.setDivisionClubEnabled(divisionId, club.id, e.target.checked)}
+                      />
+                      Has team
+                    </label>
+                    <div className="text-xs text-slate-400">{players.length} players</div>
+                  </div>
                 </div>
+                {!enabled ? (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3 text-sm text-slate-300">
+                    No team for this division. This club will be excluded from schedule generation for this division.
+                  </div>
+                ) : (
                 <div className="space-y-2">
                   {players.map((p) => (
                     <div key={p.id} className="grid grid-cols-12 gap-2">
@@ -448,6 +520,7 @@ export function SetupPage() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             )
           })}
@@ -485,7 +558,7 @@ export function SetupPage() {
                 value={clubId}
                 onChange={(e) => setClubId(e.target.value as ClubId)}
               >
-                {state.clubs.map((c) => (
+                {state.clubs.filter((c) => clubEnabledForDivision(c.id)).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>

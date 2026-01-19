@@ -69,17 +69,16 @@ function escapeHtml(v: string) {
 export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
-  const [round, setRound] = useState<'all' | '1' | '2' | '3'>('all')
+  const [round, setRound] = useState<'all' | string>('all')
   const [eventFilter, setEventFilter] = useState<string>('all')
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
 
   const playersById = useMemo(() => getPlayersById(state), [state])
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     let ms = state.matches
     if (divisionId !== 'all') ms = ms.filter((m) => m.divisionId === divisionId)
-    if (round !== 'all') ms = ms.filter((m) => String(m.round) === round)
     if (eventFilter !== 'all') {
       const [eventType, seedRaw] = eventFilter.split(':')
       const seed = Number(seedRaw)
@@ -87,7 +86,20 @@ export function ScoreEntryPage() {
       ms = ms.filter((m) => m.eventType === eventType && m.seed === seed)
     }
     return [...ms].sort(byMatchOrder)
-  }, [state.matches, divisionId, round, eventFilter])
+  }, [state.matches, divisionId, eventFilter])
+
+  const availableRounds = useMemo(() => {
+    const s = new Set<number>()
+    for (const m of baseFiltered) s.add(m.round)
+    return [...s].filter((n) => Number.isFinite(n)).sort((a, b) => a - b)
+  }, [baseFiltered])
+
+  const filtered = useMemo(() => {
+    if (round === 'all') return baseFiltered
+    const n = Number(round)
+    if (!Number.isFinite(n)) return baseFiltered
+    return baseFiltered.filter((m) => m.round === n)
+  }, [baseFiltered, round])
 
   const divisionNameById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.name])), [state.divisions])
   const divisionCodeById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.code])), [state.divisions])
@@ -202,9 +214,11 @@ export function ScoreEntryPage() {
   </div>
 </div>`
 
+        const courtCell = m.court > 0 ? String(m.court) : ''
+
         return `<tr>
   <td style="text-align:right;">${m.round}</td>
-  <td style="text-align:right;">${m.court}</td>
+  <td style="text-align:right;">${escapeHtml(courtCell)}</td>
   <td>${escapeHtml(division)}</td>
   <td>${escapeHtml(event)}</td>
   <td>${escapeHtml(match)}</td>
@@ -352,13 +366,15 @@ export function ScoreEntryPage() {
               value={round}
               onChange={(e) => {
                 const v = e.target.value
-                if (v === 'all' || v === '1' || v === '2' || v === '3') setRound(v)
+                setRound(v)
               }}
             >
               <option value="all">All</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
+              {availableRounds.map((r) => (
+                <option key={r} value={String(r)}>
+                  {r}
+                </option>
+              ))}
             </select>
           </label>
           <label className="text-sm text-slate-300">
@@ -456,7 +472,7 @@ export function ScoreEntryPage() {
                   <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
                 */}
                 <div className="text-slate-300">{m.round}</div>
-                <div className="text-slate-300">{m.court}</div>
+                <div className="text-slate-300">{m.court > 0 ? m.court : '—'}</div>
                 <div className="truncate text-slate-200">{divisionNameById.get(m.divisionId) ?? m.divisionId}</div>
                 <div className="text-slate-200">{eventLabel(m)}</div>
                 <div className="min-w-0">

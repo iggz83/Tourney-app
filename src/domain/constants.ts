@@ -1,4 +1,4 @@
-import type { Club, ClubCode, Division, EventType, SeededEvent, SkillDivisionCode } from './types'
+import type { Club, Division, EventType, SeededEvent, SkillDivisionCode } from './types'
 
 export const CLUBS: Club[] = [
   { id: 'NPC', name: 'NPC', code: 'NPC' },
@@ -53,15 +53,5 @@ export const COURTS_BY_EVENT_AND_SEED: Record<
   },
 }
 
-export const ROUND_ROBIN_ROUNDS = [
-  // Round 1: A vs B, C vs D
-  { round: 1 as const, matchups: [['NPC', 'IPG'], ['PR', 'PUP']] as const },
-  // Round 2: A vs C, B vs D
-  { round: 2 as const, matchups: [['NPC', 'PR'], ['IPG', 'PUP']] as const },
-  // Round 3: A vs D, B vs C
-  { round: 3 as const, matchups: [['NPC', 'PUP'], ['IPG', 'PR']] as const },
-] as const satisfies ReadonlyArray<{
-  round: 1 | 2 | 3
-  matchups: ReadonlyArray<readonly [ClubCode, ClubCode]>
-}>
+// NOTE: Round-robin scheduling is now generated dynamically for any number of clubs.
 
