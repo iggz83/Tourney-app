@@ -61,7 +61,7 @@ export function TvPage() {
       <div className="grid gap-3">
         <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Club Standings</h2>
+            <h2 className="text-2xl font-semibold">Club Standings</h2>
             <div className="text-sm text-slate-500">W-L • Diff</div>
           </div>
 
@@ -72,15 +72,15 @@ export function TvPage() {
                 key={row.clubId}
                 className="grid grid-cols-[40px_minmax(0,520px)_100px_80px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
               >
-                <div className="text-center text-xl font-bold text-slate-200">{idx + 1}</div>
+                <div className="text-center text-5xl font-bold text-slate-200">{idx + 1}</div>
                 <div className="min-w-0">
-                  <div className="truncate text-lg font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
+                  <div className="truncate text-5xl font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                 </div>
-                <div className="text-right tabular-nums text-2xl font-bold">
+                <div className="text-right tabular-nums text-5xl font-bold">
                   {row.wins}
                   <span className="text-slate-500">-{row.losses}</span>
                 </div>
-                <div className="text-right tabular-nums text-base font-semibold text-slate-200 whitespace-nowrap">
+                <div className="text-right tabular-nums text-4xl font-semibold text-slate-200 whitespace-nowrap">
                   {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                 </div>
               </div>
