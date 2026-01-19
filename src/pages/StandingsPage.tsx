@@ -74,13 +74,11 @@ export function StandingsPage() {
         <div className="overflow-hidden rounded-xl border border-slate-800">
           <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div className="col-span-1">#</div>
-            <div className="col-span-6">
-              <div>Player</div>
-              <div className="mt-0.5 text-[11px] font-medium text-slate-400">PF / PA</div>
-            </div>
+            <div className="col-span-3">Player</div>
             <div className="col-span-2">Club</div>
             <div className="col-span-1 text-right">W</div>
             <div className="col-span-1 text-right">L</div>
+            <div className="col-span-3 text-right">PF / PA</div>
             <div className="col-span-2 text-right">Diff</div>
           </div>
           <div className="divide-y divide-slate-800 bg-slate-950/30">
@@ -89,15 +87,15 @@ export function StandingsPage() {
               return (
                 <div key={row.playerId} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
                   <div className="col-span-1 text-slate-400">{idx + 1}</div>
-                  <div className="col-span-6 min-w-0">
-                    <div className="truncate font-semibold text-slate-100">{p ? fullName(p) : row.playerId}</div>
-                    <div className="mt-0.5 text-xs tabular-nums text-slate-400">
-                      {row.pointsFor} / {row.pointsAgainst}
-                    </div>
+                  <div className="col-span-3 min-w-0 truncate font-semibold text-slate-100">
+                    {p ? fullName(p) : row.playerId}
                   </div>
                   <div className="col-span-2 text-slate-300">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                   <div className="col-span-1 text-right tabular-nums text-slate-100">{row.wins}</div>
                   <div className="col-span-1 text-right tabular-nums text-slate-300">{row.losses}</div>
+                  <div className="col-span-3 text-right tabular-nums text-slate-300">
+                    {row.pointsFor} / {row.pointsAgainst}
+                  </div>
                   <div className="col-span-2 text-right tabular-nums font-semibold text-slate-100">
                     {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                   </div>
