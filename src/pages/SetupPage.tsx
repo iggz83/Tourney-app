@@ -1,13 +1,14 @@
 import { SEEDED_EVENTS, SKILL_DIVISIONS } from '../domain/constants'
 import type { ClubId, EventType, PlayerId } from '../domain/types'
 import { seedKey } from '../domain/keys'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTournamentStore } from '../store/tournamentStore'
 import { normalizeTournamentState } from '../store/tournamentStore'
 import {
   clearTournamentIdFromUrl,
   ensureTournamentIdInUrl,
   getTournamentIdFromUrl,
+  setCloudEnabledInUrl,
   setTournamentIdInUrl,
   shouldEnableCloudSync,
 } from '../store/cloudSync'
@@ -41,6 +42,7 @@ export function SetupPage() {
   const [pickerError, setPickerError] = useState<string | null>(null)
   const [tournaments, setTournaments] = useState<TournamentListItem[]>([])
   const [tournamentName, setTournamentName] = useState<string>('')
+  const prevTidRef = useRef<string | null>(null)
 
   const playersForClub = useMemo(
     () => state.players.filter((p) => p.clubId === clubId && p.divisionId === divisionId),
@@ -60,12 +62,18 @@ export function SetupPage() {
   useEffect(() => {
     if (!cloudEnabled || !tid) return
     let cancelled = false
-    setTournamentName('')
+    if (prevTidRef.current && prevTidRef.current !== tid) {
+      setTournamentName('')
+    }
     void fetchTournamentName(tid).then((name) => {
-      if (!cancelled) setTournamentName(name ?? '')
+      if (cancelled) return
+      const remote = (name ?? '').trim()
+      if (remote.length) setTournamentName(remote)
+      // If remote name is empty, keep whatever the user typed locally (avoid clearing on enable).
     })
     return () => {
       cancelled = true
+      prevTidRef.current = tid
     }
   }, [cloudEnabled, tid])
 
@@ -132,6 +140,30 @@ export function SetupPage() {
         </div>
       </div>
 
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">Club Directory</h2>
+          <p className="text-sm text-slate-400">Set the full club names (TV view uses full names).</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {state.clubs.map((c) => (
+            <div key={c.id} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-100">{c.code}</div>
+                <div className="text-xs text-slate-500">acronym</div>
+              </div>
+              <label className="block text-xs font-semibold text-slate-400">Full name</label>
+              <input
+                className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
+                value={c.name}
+                onChange={(e) => actions.setClubName(c.id, e.target.value)}
+                placeholder="e.g. North Pickleball Club"
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -163,18 +195,9 @@ export function SetupPage() {
             <button
               className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
               onClick={() => {
-                ensureTournamentIdInUrl()
-                // also enable cloud flag so sync activates even if tid was missing initially
-                const u = new URL(window.location.href)
-                if (u.hash.includes('#/')) {
-                  const [pathPart, queryPart] = u.hash.split('?')
-                  const sp = new URLSearchParams(queryPart ?? '')
-                  sp.set('cloud', '1')
-                  u.hash = `${pathPart}?${sp.toString()}`
-                } else {
-                  u.searchParams.set('cloud', '1')
-                }
-                window.location.href = u.toString()
+                const nextTid = ensureTournamentIdInUrl()
+                setCloudEnabledInUrl(true)
+                if (tournamentName.trim().length) void updateTournamentName(nextTid, tournamentName.trim())
               }}
             >
               {shouldEnableCloudSync() ? 'Sync enabled' : 'Enable sync + generate tid'}
@@ -274,7 +297,7 @@ export function SetupPage() {
                             className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium hover:bg-slate-700"
                             onClick={() => {
                               setTournamentIdInUrl(t.id)
-                              window.location.reload()
+                              setPickerOpen(false)
                             }}
                           >
                             Load
@@ -289,7 +312,7 @@ export function SetupPage() {
                                 if (getTournamentIdFromUrl() === t.id) {
                                   actions.reset()
                                   clearTournamentIdFromUrl()
-                                  window.location.reload()
+                                  setPickerOpen(false)
                                 }
                               } catch (e) {
                                 alert(e instanceof Error ? e.message : 'Delete failed')

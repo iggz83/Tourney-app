@@ -53,7 +53,8 @@ export function ScoreEntryPage() {
   }, [state.matches, divisionId, round])
 
   const divisionNameById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.name])), [state.divisions])
-  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name])), [state.clubs])
+  // Non-TV view uses acronyms (club ids) even if full names are configured for TV.
+  const clubLabel = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.id])), [state.clubs])
 
   const scheduleMissing = state.matches.length === 0
 
@@ -144,9 +145,9 @@ export function ScoreEntryPage() {
                 <div className="col-span-2 text-slate-200">{eventLabel(m)}</div>
                 <div className="col-span-2">
                   <div className="truncate text-slate-100">
-                    <span className={aWon ? 'font-semibold text-emerald-200' : ''}>{clubNameById.get(m.clubA)}</span>
+                    <span className={aWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubA)}</span>
                     <span className="mx-1 text-slate-500">vs</span>
-                    <span className={bWon ? 'font-semibold text-emerald-200' : ''}>{clubNameById.get(m.clubB)}</span>
+                    <span className={bWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubB)}</span>
                   </div>
                 </div>
                 <div className="col-span-2">

@@ -35,7 +35,8 @@ export function setTournamentIdInUrl(tid: string) {
     const sp = new URLSearchParams(queryPart ?? '')
     sp.set('tid', tid)
     u.hash = `${pathPart}?${sp.toString()}`
-    window.history.replaceState({}, '', u.toString())
+    // Trigger HashRouter navigation (replaceState does not).
+    window.location.hash = u.hash
     return
   }
 
@@ -56,8 +57,27 @@ export function clearTournamentIdFromUrl() {
     sp.delete('cloud')
     const qs = sp.toString()
     u.hash = qs ? `${pathPart}?${qs}` : pathPart
+    window.location.hash = u.hash
+    return
   }
 
+  window.history.replaceState({}, '', u.toString())
+}
+
+export function setCloudEnabledInUrl(enabled: boolean) {
+  const u = new URL(window.location.href)
+  if (u.hash.includes('#/')) {
+    const [pathPart, queryPart] = u.hash.split('?')
+    const sp = new URLSearchParams(queryPart ?? '')
+    if (enabled) sp.set('cloud', '1')
+    else sp.delete('cloud')
+    const qs = sp.toString()
+    u.hash = qs ? `${pathPart}?${qs}` : pathPart
+    window.location.hash = u.hash
+    return
+  }
+  if (enabled) u.searchParams.set('cloud', '1')
+  else u.searchParams.delete('cloud')
   window.history.replaceState({}, '', u.toString())
 }
 
@@ -102,26 +122,45 @@ export async function fetchTournamentCoreState(tid: string): Promise<TournamentS
 
 export async function listTournaments(limit = 25): Promise<TournamentListItem[]> {
   if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase
+  // If the DB hasn't been migrated yet, `name` might not exist; fall back gracefully.
+  const first = await supabase
     .from('tournaments')
     .select('id,name,created_at,updated_at')
     .order('updated_at', { ascending: false })
     .limit(limit)
-  if (error) throw error
-  return (data ?? []) as TournamentListItem[]
+  if (!first.error) return (first.data ?? []) as TournamentListItem[]
+  if (String(first.error.message).includes('name')) {
+    const fallback = await supabase
+      .from('tournaments')
+      .select('id,created_at,updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(limit)
+    if (fallback.error) throw fallback.error
+    return ((fallback.data ?? []) as Array<{ id: string; created_at: string; updated_at: string }>).map((t) => ({
+      ...t,
+      name: '',
+    }))
+  }
+  throw first.error
 }
 
 export async function fetchTournamentName(tid: string): Promise<string> {
   if (!supabase) throw new Error('Supabase not configured')
   const { data, error } = await supabase.from('tournaments').select('name').eq('id', tid).maybeSingle()
-  if (error) throw error
+  if (error) {
+    if (String(error.message).includes('name')) return ''
+    throw error
+  }
   return (data?.name as string | undefined) ?? ''
 }
 
 export async function updateTournamentName(tid: string, name: string): Promise<void> {
   if (!supabase) throw new Error('Supabase not configured')
   const { error } = await supabase.from('tournaments').update({ name }).eq('id', tid)
-  if (error) throw error
+  if (error) {
+    if (String(error.message).includes('name')) return
+    throw error
+  }
 }
 
 export async function deleteTournament(tid: string): Promise<void> {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { generateSchedule } from '../domain/scheduler'
 import { seedKey } from '../domain/keys'
 import type { ClubId, EventType, MatchId, PlayerId, TournamentState, TournamentStateV1, TournamentStateV2 } from '../domain/types'
@@ -23,6 +24,7 @@ const STORAGE_KEY_V1 = 'ictpt_state_v1'
 type Action =
   | { type: 'reset' }
   | { type: 'import'; state: TournamentStateV2 }
+  | { type: 'club.name.set'; clubId: ClubId; name: string }
   | { type: 'player.update'; playerId: PlayerId; firstName: string; lastName: string }
   | { type: 'division.autoseed'; divisionId: string; clubId?: ClubId }
   | {
@@ -47,6 +49,10 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return createInitialTournamentState()
     case 'import':
       return touch(action.state)
+    case 'club.name.set': {
+      const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, name: action.name } : c))
+      return touch({ ...state, clubs })
+    }
     case 'player.update': {
       const players = state.players.map((p) =>
         p.id === action.playerId ? { ...p, firstName: action.firstName, lastName: action.lastName } : p,
@@ -236,6 +242,7 @@ type Store = {
   actions: {
     reset(): void
     importState(state: TournamentStateV2): void
+    setClubName(clubId: ClubId, name: string): void
     updatePlayer(playerId: PlayerId, firstName: string, lastName: string): void
     autoSeed(divisionId: string, clubId?: ClubId): void
     unlockMatch(matchId: MatchId): void
@@ -255,6 +262,7 @@ type Store = {
 const Ctx = createContext<Store | null>(null)
 
 export function TournamentStoreProvider({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
   const [state, dispatch] = useReducer(reducer, undefined, loadState)
   const [, setSyncStatus] = useState<CloudSyncStatus>('disabled')
   const isApplyingRemote = useRef(false)
@@ -279,14 +287,36 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     stateUpdatedAtRef.current = state.updatedAt
   }, [state.updatedAt])
 
-  // Optional cloud sync (Supabase): enabled when ?tid=<uuid> is present.
+  // Optional cloud sync (Supabase): enabled when ?tid=<uuid> (or cloud=1) is present.
   useEffect(() => {
-    if (!shouldEnableCloudSync()) return
+    const enabled = shouldEnableCloudSync()
+    const tidFromUrl = getTournamentIdFromUrl()
+
+    // If sync disabled, teardown any existing connection.
+    if (!enabled) {
+      connRef.current?.close()
+      connRef.current = null
+      tidRef.current = null
+      return
+    }
+
+    const tid = tidFromUrl ?? ensureTournamentIdInUrl()
+
+    // If switching tournaments, reset sync bookkeeping and close old channel.
+    if (tidRef.current && tidRef.current !== tid) {
+      connRef.current?.close()
+      connRef.current = null
+      lastSentAt.current = null
+      prevCoreSigRef.current = null
+      prevScheduleSigRef.current = null
+      prevScoresRef.current = new Map()
+    }
+    tidRef.current = tid
+
+    // If already connected for this tid, nothing to do.
+    if (connRef.current && tidRef.current === tid) return
 
     let cancelled = false
-    const tidFromUrl = getTournamentIdFromUrl()
-    const tid = tidFromUrl ?? ensureTournamentIdInUrl()
-    tidRef.current = tid
 
     ;(async () => {
       try {
@@ -365,9 +395,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       connRef.current = null
       tidRef.current = null
     }
-    // Intentionally do not include `state` in deps; connection lifetime is per mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [location.key, location.search, location.hash])
 
   function coreSignature(s: TournamentStateV2) {
     return JSON.stringify({ clubs: s.clubs, divisions: s.divisions, players: s.players, divisionConfigs: s.divisionConfigs })
@@ -437,6 +465,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     return {
       reset: () => dispatch({ type: 'reset' }),
       importState: (s) => dispatch({ type: 'import', state: s }),
+      setClubName: (clubId, name) => dispatch({ type: 'club.name.set', clubId, name }),
       updatePlayer: (playerId, firstName, lastName) => dispatch({ type: 'player.update', playerId, firstName, lastName }),
       autoSeed: (divisionId, clubId) => dispatch({ type: 'division.autoseed', divisionId, clubId }),
       unlockMatch: (matchId) => dispatch({ type: 'match.unlock', matchId }),

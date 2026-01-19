@@ -14,7 +14,8 @@ export function StandingsPage() {
   const playerStandings = useMemo(() => computePlayerStandings(state), [state])
   const coverage = useMemo(() => computeIndividualCoverage(state), [state])
 
-  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name])), [state.clubs])
+  // Non-TV view uses acronyms (club ids) even if full names are configured for TV.
+  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.id])), [state.clubs])
   const playerById = useMemo(() => new Map(state.players.map((p) => [p.id, p])), [state.players])
 
   return (
@@ -28,14 +29,15 @@ export function StandingsPage() {
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold">Club Standings</h2>
-        <div className="overflow-hidden rounded-xl border border-slate-800">
+        <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <div className="min-w-[720px]">
           <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div className="col-span-1">#</div>
             <div className="col-span-3">Club</div>
             <div className="col-span-2 text-right">W</div>
             <div className="col-span-2 text-right">L</div>
-            <div className="col-span-2 text-right">Diff</div>
-            <div className="col-span-2 text-right">PF / PA</div>
+            <div className="col-span-2 text-right whitespace-nowrap">PF / PA</div>
+            <div className="col-span-2 text-right whitespace-nowrap">Diff</div>
           </div>
           <div className="divide-y divide-slate-800 bg-slate-950/30">
             {clubStandings.map((row, idx) => (
@@ -44,14 +46,15 @@ export function StandingsPage() {
                 <div className="col-span-3 font-semibold text-slate-100">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                 <div className="col-span-2 text-right text-slate-100">{row.wins}</div>
                 <div className="col-span-2 text-right text-slate-300">{row.losses}</div>
-                <div className="col-span-2 text-right font-semibold text-slate-100">
-                  {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
-                </div>
-                <div className="col-span-2 text-right text-slate-300">
+                <div className="col-span-2 text-right tabular-nums text-slate-300 whitespace-nowrap">
                   {row.pointsFor} / {row.pointsAgainst}
+                </div>
+                <div className="col-span-2 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
+                  {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                 </div>
               </div>
             ))}
+          </div>
           </div>
         </div>
       </section>
@@ -71,15 +74,16 @@ export function StandingsPage() {
             scored matches.
           </div>
         ) : null}
-        <div className="overflow-hidden rounded-xl border border-slate-800">
+        <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <div className="min-w-[900px]">
           <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div className="col-span-1">#</div>
             <div className="col-span-3">Player</div>
             <div className="col-span-2">Club</div>
             <div className="col-span-1 text-right">W</div>
             <div className="col-span-1 text-right">L</div>
-            <div className="col-span-3 text-right">PF / PA</div>
-            <div className="col-span-2 text-right">Diff</div>
+            <div className="col-span-3 text-right whitespace-nowrap">PF / PA</div>
+            <div className="col-span-2 text-right whitespace-nowrap">Diff</div>
           </div>
           <div className="divide-y divide-slate-800 bg-slate-950/30">
             {playerStandings.slice(0, 16).map((row, idx) => {
@@ -93,15 +97,16 @@ export function StandingsPage() {
                   <div className="col-span-2 text-slate-300">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                   <div className="col-span-1 text-right tabular-nums text-slate-100">{row.wins}</div>
                   <div className="col-span-1 text-right tabular-nums text-slate-300">{row.losses}</div>
-                  <div className="col-span-3 text-right tabular-nums text-slate-300">
+                  <div className="col-span-3 text-right tabular-nums text-slate-300 whitespace-nowrap">
                     {row.pointsFor} / {row.pointsAgainst}
                   </div>
-                  <div className="col-span-2 text-right tabular-nums font-semibold text-slate-100">
+                  <div className="col-span-2 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
                     {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                   </div>
                 </div>
               )
             })}
+          </div>
           </div>
         </div>
       </section>

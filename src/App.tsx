@@ -13,10 +13,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   const isTv = location.pathname.startsWith('/tv')
   const search = location.search || ''
 
-  if (isTv) {
-    return <div className="min-h-dvh bg-slate-950 text-slate-100">{children}</div>
-  }
-
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800">
@@ -35,7 +31,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      <main className={isTv ? 'mx-auto max-w-none px-0 py-0' : 'mx-auto max-w-6xl px-4 py-6'}>{children}</main>
     </div>
   )
 }
