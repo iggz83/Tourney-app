@@ -72,15 +72,15 @@ export function TvPage() {
                 key={row.clubId}
                 className="grid grid-cols-[40px_minmax(0,520px)_100px_80px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
               >
-                <div className="text-center text-5xl font-bold text-slate-200">{idx + 1}</div>
+                <div className="text-center text-3xl font-bold text-slate-200">{idx + 1}</div>
                 <div className="min-w-0">
-                  <div className="truncate text-5xl font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
+                  <div className="truncate text-3xl font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                 </div>
-                <div className="text-right tabular-nums text-5xl font-bold">
+                <div className="text-right tabular-nums text-3xl font-bold">
                   {row.wins}
                   <span className="text-slate-500">-{row.losses}</span>
                 </div>
-                <div className="text-right tabular-nums text-4xl font-semibold text-slate-200 whitespace-nowrap">
+                <div className="text-right tabular-nums text-2xl font-semibold text-slate-200 whitespace-nowrap">
                   {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                 </div>
               </div>
