@@ -222,11 +222,16 @@ export async function upsertTournamentCoreState(tid: string, core: TournamentSta
 
 export async function upsertTournamentMatches(tid: string, matches: Match[]): Promise<void> {
   if (!supabase) throw new Error('Supabase not configured')
-  // Important: we replace the schedule rows so stale matches from previous schedules
-  // don't linger in Supabase and "come back" on other devices.
-  const { error: delErr } = await supabase.from('tournament_matches').delete().eq('tournament_id', tid)
-  if (delErr) throw delErr
-  if (matches.length === 0) return
+
+  // Important: DO NOT delete-all then insert.
+  // That can cause realtime DELETE events to race/arrive out-of-order and wipe rows that were just reinserted.
+  // Instead: upsert desired rows, then delete only rows that are no longer present.
+  if (matches.length === 0) {
+    const { error: delAllErr } = await supabase.from('tournament_matches').delete().eq('tournament_id', tid)
+    if (delAllErr) throw delAllErr
+    return
+  }
+
   const payload = matches.map((m) => ({
     tournament_id: tid,
     match_id: m.id,
@@ -242,8 +247,33 @@ export async function upsertTournamentMatches(tid: string, matches: Match[]): Pr
     score_b: m.score?.b ?? null,
     completed_at: m.completedAt ?? null,
   }))
-  const { error } = await supabase.from('tournament_matches').upsert(payload, { onConflict: 'tournament_id,match_id' })
-  if (error) throw error
+
+  const { error: upsertErr } = await supabase
+    .from('tournament_matches')
+    .upsert(payload, { onConflict: 'tournament_id,match_id' })
+  if (upsertErr) throw upsertErr
+
+  const desiredIds = new Set(matches.map((m) => m.id))
+  const { data: existing, error: listErr } = await supabase
+    .from('tournament_matches')
+    .select('match_id')
+    .eq('tournament_id', tid)
+  if (listErr) throw listErr
+
+  const toDelete = ((existing ?? []) as Array<{ match_id: string }>).map((r) => r.match_id).filter((id) => !desiredIds.has(id))
+  if (toDelete.length === 0) return
+
+  // Delete in chunks to avoid URL/query limits.
+  const chunkSize = 200
+  for (let i = 0; i < toDelete.length; i += chunkSize) {
+    const chunk = toDelete.slice(i, i + chunkSize)
+    const { error: delErr } = await supabase
+      .from('tournament_matches')
+      .delete()
+      .eq('tournament_id', tid)
+      .in('match_id', chunk)
+    if (delErr) throw delErr
+  }
 }
 
 export async function setTournamentMatchScore(args: {
