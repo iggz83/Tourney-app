@@ -203,6 +203,32 @@ export function SetupPage() {
             >
               {shouldEnableCloudSync() ? 'Sync enabled' : 'Enable sync + generate tid'}
             </button>
+            {shouldEnableCloudSync() ? (
+              <button
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+                onClick={() => {
+                  if (
+                    !confirm(
+                      'Start a new tournament?\n\nThis creates a new Tournament ID (tid) and switches this browser to it.\nYour existing tournament remains saved in Supabase.\n\nWe will keep your setup (clubs/rosters/mapping) but clear matches/scores.',
+                    )
+                  )
+                    return
+
+                  const newTid = crypto.randomUUID()
+                  // Keep setup but clear matches/scores for the new tournament
+                  actions.importState({
+                    ...state,
+                    matches: [],
+                    updatedAt: new Date().toISOString(),
+                  })
+                  setTournamentName('')
+                  setTournamentIdInUrl(newTid)
+                  setCloudEnabledInUrl(true)
+                }}
+              >
+                New tournament
+              </button>
+            ) : null}
             <button
               className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
               onClick={async () => {
