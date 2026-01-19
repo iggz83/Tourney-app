@@ -13,7 +13,8 @@ export function TvPage() {
   const clubStandings = useMemo(() => computeClubStandings(state), [state])
   const playerStandings = useMemo(() => computePlayerStandings(state), [state])
 
-  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name])), [state.clubs])
+  // TV should use the full club names (configured in Setup -> Club Directory).
+  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name || c.id])), [state.clubs])
   const playerById = useMemo(() => new Map(state.players.map((p) => [p.id, p])), [state.players])
 
   return (

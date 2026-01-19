@@ -341,7 +341,25 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             isApplyingRemote.current = true
             const current = stateRef.current
             const matches = current.matches.some((x) => x.id === m.id)
-              ? current.matches.map((x) => (x.id === m.id ? { ...x, ...m } : x))
+              ? current.matches.map((x) => {
+                  if (x.id !== m.id) return x
+                  // Some Supabase realtime payloads may omit non-score columns depending on replica identity / migration state.
+                  // Never let "empty" incoming fields clobber an existing match's structural identity.
+                  return {
+                    ...x,
+                    divisionId: m.divisionId ? m.divisionId : x.divisionId,
+                    round: m.round === 1 || m.round === 2 || m.round === 3 ? m.round : x.round,
+                    matchupIndex: m.matchupIndex === 0 || m.matchupIndex === 1 ? m.matchupIndex : x.matchupIndex,
+                    eventType: m.eventType ? m.eventType : x.eventType,
+                    seed: m.seed > 0 ? m.seed : x.seed,
+                    court: m.court > 0 ? m.court : x.court,
+                    clubA: m.clubA ? m.clubA : x.clubA,
+                    clubB: m.clubB ? m.clubB : x.clubB,
+                    // Scores and completion should always apply (including clearing)
+                    score: m.score,
+                    completedAt: m.completedAt,
+                  }
+                })
               : [...current.matches, m]
             dispatch({ type: 'import', state: { ...current, matches, updatedAt: new Date().toISOString() } })
             setTimeout(() => {

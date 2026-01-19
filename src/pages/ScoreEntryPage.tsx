@@ -53,6 +53,7 @@ export function ScoreEntryPage() {
   }, [state.matches, divisionId, round])
 
   const divisionNameById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.name])), [state.divisions])
+  const divisionCodeById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.code])), [state.divisions])
   // Non-TV view uses acronyms (club ids) even if full names are configured for TV.
   const clubLabel = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.id])), [state.clubs])
 
@@ -109,18 +110,20 @@ export function ScoreEntryPage() {
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-xl border border-slate-800">
-        <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
-          <div className="col-span-1">R</div>
-          <div className="col-span-1">Ct</div>
-          <div className="col-span-2">Division</div>
-          <div className="col-span-2">Event</div>
-          <div className="col-span-2">Match</div>
-          <div className="col-span-2">Players</div>
-          <div className="col-span-2 text-right">Score</div>
-        </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-800">
+        <div className="min-w-[1050px]">
+          <div className="grid grid-cols-[110px_44px_54px_140px_120px_140px_1fr_260px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+            <div className="whitespace-nowrap">ID</div>
+            <div>R</div>
+            <div>Ct</div>
+            <div>Division</div>
+            <div>Event</div>
+            <div>Match</div>
+            <div>Players</div>
+            <div className="text-right">Score</div>
+          </div>
 
-        <div className="divide-y divide-slate-800 bg-slate-950/30">
+          <div className="divide-y divide-slate-800 bg-slate-950/30">
           {filtered.map((m) => {
             const computed = computeMatch(m)
             const divisionConfig = getDivisionConfig(state as TournamentStateV2, m.divisionId)
@@ -137,25 +140,30 @@ export function ScoreEntryPage() {
             const showA = locked ? (m.score?.a?.toString() ?? '') : draft.a
             const showB = locked ? (m.score?.b?.toString() ?? '') : draft.b
 
+            const divCode = divisionCodeById.get(m.divisionId) ?? m.divisionId
+            const evShort = eventLabel(m).replace(/\s+/g, '')
+            const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
+
             return (
-              <div key={m.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
-                <div className="col-span-1 text-slate-300">{m.round}</div>
-                <div className="col-span-1 text-slate-300">{m.court}</div>
-                <div className="col-span-2 truncate text-slate-200">{divisionNameById.get(m.divisionId) ?? m.divisionId}</div>
-                <div className="col-span-2 text-slate-200">{eventLabel(m)}</div>
-                <div className="col-span-2">
+              <div key={m.id} className="grid grid-cols-[110px_44px_54px_140px_120px_140px_1fr_260px] items-center gap-2 px-3 py-2 text-sm">
+                <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
+                <div className="text-slate-300">{m.round}</div>
+                <div className="text-slate-300">{m.court}</div>
+                <div className="truncate text-slate-200">{divisionNameById.get(m.divisionId) ?? m.divisionId}</div>
+                <div className="text-slate-200">{eventLabel(m)}</div>
+                <div>
                   <div className="truncate text-slate-100">
                     <span className={aWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubA)}</span>
                     <span className="mx-1 text-slate-500">vs</span>
                     <span className={bWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubB)}</span>
                   </div>
                 </div>
-                <div className="col-span-2">
+                <div className="min-w-0">
                   <div className="truncate text-xs text-slate-300">
                     {aNames} <span className="text-slate-600">|</span> {bNames}
                   </div>
                 </div>
-                <div className="col-span-2 flex items-center justify-end gap-2">
+                <div className="flex items-center justify-end gap-2">
                   <input
                     inputMode="numeric"
                     className={[
@@ -233,6 +241,7 @@ export function ScoreEntryPage() {
               </div>
             )
           })}
+          </div>
         </div>
       </div>
     </div>
