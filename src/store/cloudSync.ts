@@ -201,8 +201,8 @@ export async function fetchTournamentMatches(tid: string): Promise<Match[]> {
     return {
       id: r.match_id,
       divisionId: r.division_id,
-      round: r.round as 1 | 2 | 3,
-      matchupIndex: r.matchup_index as 0 | 1,
+      round: r.round,
+      matchupIndex: r.matchup_index,
       eventType: r.event_type as Match['eventType'],
       seed: r.seed,
       court: r.court,
@@ -222,6 +222,10 @@ export async function upsertTournamentCoreState(tid: string, core: TournamentSta
 
 export async function upsertTournamentMatches(tid: string, matches: Match[]): Promise<void> {
   if (!supabase) throw new Error('Supabase not configured')
+  // Important: we replace the schedule rows so stale matches from previous schedules
+  // don't linger in Supabase and "come back" on other devices.
+  const { error: delErr } = await supabase.from('tournament_matches').delete().eq('tournament_id', tid)
+  if (delErr) throw delErr
   if (matches.length === 0) return
   const payload = matches.map((m) => ({
     tournament_id: tid,
@@ -266,8 +270,9 @@ export function connectCloudSync(args: {
   onStatus: (s: CloudSyncStatus) => void
   onRemoteCoreState: (s: TournamentStateV2) => void
   onRemoteMatchChange: (m: Match) => void
+  onRemoteMatchDelete?: (matchId: string) => void
 }): { close: () => void } {
-  const { tid, onStatus, onRemoteCoreState, onRemoteMatchChange } = args
+  const { tid, onStatus, onRemoteCoreState, onRemoteMatchChange, onRemoteMatchDelete } = args
 
   const sb = supabase
   if (!sb) {
@@ -294,6 +299,13 @@ export function connectCloudSync(args: {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'tournament_matches', filter: `tournament_id=eq.${tid}` },
       (payload) => {
+        if (payload.eventType === 'DELETE') {
+          const old = payload.old as Partial<MatchRow> | null
+          const mid = old?.match_id
+          if (typeof mid === 'string') onRemoteMatchDelete?.(mid)
+          return
+        }
+
         const r = payload.new as Partial<MatchRow> | null
         if (!r || typeof r.match_id !== 'string') return
         const score =
@@ -303,8 +315,8 @@ export function connectCloudSync(args: {
         const m: Match = {
           id: r.match_id,
           divisionId: String(r.division_id ?? ''),
-          round: (Number(r.round) as 1 | 2 | 3) ?? 1,
-          matchupIndex: (Number(r.matchup_index) as 0 | 1) ?? 0,
+          round: Number(r.round ?? 1),
+          matchupIndex: Number(r.matchup_index ?? 0),
           eventType: String(r.event_type ?? '') as Match['eventType'],
           seed: Number(r.seed ?? 0),
           court: Number(r.court ?? 0),

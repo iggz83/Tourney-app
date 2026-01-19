@@ -42,6 +42,7 @@ type Action =
   | { type: 'schedule.generate' }
   | { type: 'schedule.regenerate' }
   | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number] }
+  | { type: 'match.delete'; matchId: MatchId }
   | { type: 'matches.scores.clearAll' }
   | { type: 'match.unlock'; matchId: MatchId }
   | { type: 'match.score.set'; matchId: MatchId; score?: { a: number; b: number } }
@@ -229,6 +230,10 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
             }
           })
         : [...state.matches, incoming]
+      return touch({ ...state, matches })
+    }
+    case 'match.delete': {
+      const matches = state.matches.filter((m) => m.id !== action.matchId)
       return touch({ ...state, matches })
     }
     case 'matches.scores.clearAll': {
@@ -458,6 +463,13 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             // Apply match row changes without touching core state (prevents overwriting club/player edits while typing).
             isApplyingRemote.current = true
             dispatch({ type: 'matches.upsert', match: m })
+            setTimeout(() => {
+              isApplyingRemote.current = false
+            }, 0)
+          },
+          onRemoteMatchDelete: (matchId) => {
+            isApplyingRemote.current = true
+            dispatch({ type: 'match.delete', matchId })
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)

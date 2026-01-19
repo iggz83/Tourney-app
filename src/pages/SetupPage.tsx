@@ -683,6 +683,7 @@ export function SetupPage() {
           Matches generated: <span className="font-semibold text-slate-300">{state.matches.length}</span>
         </div>
         <div>Last updated: {new Date(state.updatedAt).toLocaleString()}</div>
+        <div>App version: {__APP_VERSION__}</div>
       </div>
     </div>
   )
