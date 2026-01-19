@@ -45,6 +45,10 @@ function parseScore(v: string): number | undefined {
   return Math.floor(n)
 }
 
+function isEventType(v: string): v is Match['eventType'] {
+  return v === 'WOMENS_DOUBLES' || v === 'MENS_DOUBLES' || v === 'MIXED_DOUBLES'
+}
+
 type SortKey = 'id' | 'round' | 'court' | 'division' | 'event' | 'match' | 'players' | 'score'
 type SortDir = 'asc' | 'desc'
 
@@ -79,7 +83,8 @@ export function ScoreEntryPage() {
     if (eventFilter !== 'all') {
       const [eventType, seedRaw] = eventFilter.split(':')
       const seed = Number(seedRaw)
-      ms = ms.filter((m) => m.eventType === (eventType as any) && m.seed === seed)
+      if (!isEventType(eventType) || !Number.isFinite(seed)) return []
+      ms = ms.filter((m) => m.eventType === eventType && m.seed === seed)
     }
     return [...ms].sort(byMatchOrder)
   }, [state.matches, divisionId, round, eventFilter])
@@ -352,7 +357,10 @@ export function ScoreEntryPage() {
             <select
               className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
               value={round}
-              onChange={(e) => setRound(e.target.value as any)}
+              onChange={(e) => {
+                const v = e.target.value
+                if (v === 'all' || v === '1' || v === '2' || v === '3') setRound(v)
+              }}
             >
               <option value="all">All</option>
               <option value="1">1</option>
@@ -414,8 +422,11 @@ export function ScoreEntryPage() {
 
       <div className="overflow-x-auto rounded-xl border border-slate-800">
         <div className="min-w-[1200px]">
-          <div className="grid grid-cols-[120px_44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+          {/* ID column removed (kept here in case we want to restore it later)
+            grid-cols-[120px_44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px]
             <div className="whitespace-nowrap">{headerButton('ID', 'id')}</div>
+          */}
+          <div className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div>{headerButton('R', 'round')}</div>
             <div>{headerButton('Ct', 'court')}</div>
             <div>{headerButton('Division', 'division')}</div>
@@ -447,8 +458,10 @@ export function ScoreEntryPage() {
             const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
 
             return (
-              <div key={m.id} className="grid grid-cols-[120px_44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] items-center gap-2 px-3 py-2 text-sm">
-                <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
+              <div key={m.id} className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] items-center gap-2 px-3 py-2 text-sm">
+                {/* ID column removed (kept here in case we want to restore it later)
+                  <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
+                */}
                 <div className="text-slate-300">{m.round}</div>
                 <div className="text-slate-300">{m.court}</div>
                 <div className="truncate text-slate-200">{divisionNameById.get(m.divisionId) ?? m.divisionId}</div>
@@ -523,8 +536,9 @@ export function ScoreEntryPage() {
                           }
                           actions.setScore(m.id, { a: nextA, b: nextB })
                           setDrafts((prev) => {
-                            const { [m.id]: _, ...rest } = prev
-                            return rest
+                            const next = { ...prev }
+                            delete next[m.id]
+                            return next
                           })
                         }}
                       >
