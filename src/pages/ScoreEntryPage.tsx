@@ -215,6 +215,21 @@ export function ScoreEntryPage() {
           >
             Generate schedule
           </button>
+          <button
+            className="rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40"
+            onClick={() => {
+              if (
+                !confirm(
+                  'Reset ALL scores?\n\nThis clears every match score and unlocks all rows.\n(Your schedule and mappings will remain.)',
+                )
+              )
+                return
+              actions.clearAllScores()
+              setDrafts({})
+            }}
+          >
+            Reset all scores
+          </button>
         </div>
       </div>
 
@@ -351,6 +366,17 @@ export function ScoreEntryPage() {
                       </button>
                     </>
                   )}
+                  <button
+                    className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
+                    title="Reset score"
+                    onClick={() => {
+                      if (!confirm(`Reset score for ${rowId}?`)) return
+                      actions.setScore(m.id, undefined)
+                      setDrafts((prev) => ({ ...prev, [m.id]: { a: '', b: '' } }))
+                    }}
+                  >
+                    Reset
+                  </button>
                 </div>
               </div>
             )
