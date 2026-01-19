@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { computeClubStandings, computeIndividualCoverage, computePlayerStandings } from '../domain/analytics'
 import { useTournamentStore } from '../store/tournamentStore'
 
@@ -7,15 +7,25 @@ function fullName(p: { firstName: string; lastName: string }) {
   return s.length ? s : '(unnamed)'
 }
 
+function displayPlayerName(p: { firstName: string; lastName: string; clubId: string }) {
+  // If firstName is the club acronym, hide it here.
+  if (p.firstName.trim() === p.clubId) {
+    const last = p.lastName.trim()
+    return last.length ? last : '(unnamed)'
+  }
+  return fullName(p)
+}
+
 export function StandingsPage() {
   const { state } = useTournamentStore()
+  const [showAll, setShowAll] = useState(false)
 
   const clubStandings = useMemo(() => computeClubStandings(state), [state])
   const playerStandings = useMemo(() => computePlayerStandings(state), [state])
   const coverage = useMemo(() => computeIndividualCoverage(state), [state])
 
-  // Non-TV view uses acronyms (club ids) even if full names are configured for TV.
-  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.id])), [state.clubs])
+  // Standings should use full club names (fallback to id).
+  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name || c.id])), [state.clubs])
   const playerById = useMemo(() => new Map(state.players.map((p) => [p.id, p])), [state.players])
 
   return (
@@ -61,8 +71,15 @@ export function StandingsPage() {
 
       <section className="space-y-2">
         <div className="flex items-end justify-between gap-3">
-          <h2 className="text-base font-semibold">Top Individual Performers</h2>
-          <div className="text-xs text-slate-400">Showing top 16 by wins, then point diff</div>
+          <h2 className="text-base font-semibold">{showAll ? 'All Individual Performers' : 'Top Individual Performers'}</h2>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-900"
+              onClick={() => setShowAll((v) => !v)}
+            >
+              {showAll ? 'Show top 16' : `Show all (${playerStandings.length})`}
+            </button>
+          </div>
         </div>
         {coverage.scoredMatches > 0 && coverage.scoredMatchesWithPlayerMapping < coverage.scoredMatches ? (
           <div className="rounded-lg border border-amber-900/50 bg-amber-950/40 p-3 text-sm text-amber-200">
@@ -86,13 +103,13 @@ export function StandingsPage() {
             <div className="col-span-1 text-right whitespace-nowrap">Diff</div>
           </div>
           <div className="divide-y divide-slate-800 bg-slate-950/30">
-            {playerStandings.slice(0, 16).map((row, idx) => {
+            {(showAll ? playerStandings : playerStandings.slice(0, 16)).map((row, idx) => {
               const p = playerById.get(row.playerId)
               return (
                 <div key={row.playerId} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
                   <div className="col-span-1 text-slate-400">{idx + 1}</div>
                   <div className="col-span-3 min-w-0 truncate font-semibold text-slate-100">
-                    {p ? fullName(p) : row.playerId}
+                    {p ? displayPlayerName(p) : row.playerId}
                   </div>
                   <div className="col-span-2 text-slate-300">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                   <div className="col-span-1 text-right tabular-nums text-slate-100">{row.wins}</div>

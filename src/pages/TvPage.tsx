@@ -7,6 +7,14 @@ function fullName(p: { firstName: string; lastName: string }) {
   return s.length ? s : '(unnamed)'
 }
 
+function displayPlayerName(p: { firstName: string; lastName: string; clubId: string }) {
+  if (p.firstName.trim() === p.clubId) {
+    const last = p.lastName.trim()
+    return last.length ? last : '(unnamed)'
+  }
+  return fullName(p)
+}
+
 export function TvPage() {
   const { state } = useTournamentStore()
 
@@ -87,7 +95,7 @@ export function TvPage() {
                   <div className="flex items-center gap-4">
                     <div className="w-8 text-center text-lg font-bold text-slate-300">{idx + 1}</div>
                     <div className="min-w-0">
-                      <div className="truncate text-lg font-semibold">{p ? fullName(p) : row.playerId}</div>
+                      <div className="truncate text-lg font-semibold">{p ? displayPlayerName(p) : row.playerId}</div>
                       <div className="text-sm text-slate-400">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                     </div>
                   </div>
