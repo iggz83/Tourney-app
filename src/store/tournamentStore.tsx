@@ -6,8 +6,8 @@ import { createInitialTournamentState } from './state'
 import {
   connectCloudSync,
   ensureTournamentRow,
+  ensureTournamentIdInUrl,
   getTournamentIdFromUrl,
-  setTournamentIdInUrl,
   shouldEnableCloudSync,
   type CloudSyncStatus,
 } from './cloudSync'
@@ -225,8 +225,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
 
     let cancelled = false
     const tidFromUrl = getTournamentIdFromUrl()
-    const tid = tidFromUrl ?? crypto.randomUUID()
-    if (!tidFromUrl) setTournamentIdInUrl(tid)
+    const tid = tidFromUrl ?? ensureTournamentIdInUrl()
 
     ;(async () => {
       try {

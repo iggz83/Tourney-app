@@ -4,6 +4,7 @@ import { seedKey } from '../domain/keys'
 import { useMemo, useState } from 'react'
 import { useTournamentStore } from '../store/tournamentStore'
 import { normalizeTournamentState } from '../store/tournamentStore'
+import { ensureTournamentIdInUrl, getTournamentIdFromUrl, shouldEnableCloudSync } from '../store/cloudSync'
 
 function playerLabel(p: { firstName: string; lastName: string }) {
   const full = `${p.firstName} ${p.lastName}`.trim()
@@ -27,6 +28,7 @@ export function SetupPage() {
   const [divisionId, setDivisionId] = useState(state.divisions[0]?.id ?? SKILL_DIVISIONS[0].id)
   const [clubId, setClubId] = useState<ClubId>(state.clubs[0]?.id ?? 'NPC')
   const [importError, setImportError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const playersForClub = useMemo(
     () => state.players.filter((p) => p.clubId === clubId && p.divisionId === divisionId),
@@ -102,6 +104,57 @@ export function SetupPage() {
           </button>
         </div>
       </div>
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Cloud Sync (Supabase)</div>
+            <div className="text-sm text-slate-300">
+              Tournament ID (tid):{' '}
+              <span className="font-mono text-slate-100">{getTournamentIdFromUrl() ?? '— not set —'}</span>
+            </div>
+            <div className="text-xs text-slate-400">
+              Share the same link (same <span className="font-mono">tid</span>) to the scoring device and the TV.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
+              onClick={() => {
+                ensureTournamentIdInUrl()
+                // also enable cloud flag so sync activates even if tid was missing initially
+                const u = new URL(window.location.href)
+                if (u.hash.includes('#/')) {
+                  const [pathPart, queryPart] = u.hash.split('?')
+                  const sp = new URLSearchParams(queryPart ?? '')
+                  sp.set('cloud', '1')
+                  u.hash = `${pathPart}?${sp.toString()}`
+                } else {
+                  u.searchParams.set('cloud', '1')
+                }
+                window.location.href = u.toString()
+              }}
+            >
+              {shouldEnableCloudSync() ? 'Sync enabled' : 'Enable sync + generate tid'}
+            </button>
+            <button
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+              onClick={async () => {
+                ensureTournamentIdInUrl()
+                try {
+                  await navigator.clipboard.writeText(window.location.href)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 1000)
+                } catch {
+                  // ignore
+                }
+              }}
+            >
+              {copied ? 'Copied!' : 'Copy link'}
+            </button>
+          </div>
+        </div>
+      </section>
 
       {importError ? (
         <div className="rounded-lg border border-red-900/50 bg-red-950/40 p-3 text-sm text-red-200">

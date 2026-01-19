@@ -38,8 +38,22 @@ export function setTournamentIdInUrl(tid: string) {
 }
 
 export function shouldEnableCloudSync(): boolean {
-  // enable when tid is present (and env vars exist)
-  return !!getTournamentIdFromUrl()
+  // enable when tid is present, or when explicitly requested via ?cloud=1
+  const u = new URL(window.location.href)
+  const direct = u.searchParams.get('cloud') === '1'
+  const hash = u.hash || ''
+  const idx = hash.indexOf('?')
+  const hashParams = idx === -1 ? new URLSearchParams('') : new URLSearchParams(hash.slice(idx + 1))
+  const hashCloud = hashParams.get('cloud') === '1'
+  return !!getTournamentIdFromUrl() || direct || hashCloud
+}
+
+export function ensureTournamentIdInUrl(): string {
+  const existing = getTournamentIdFromUrl()
+  if (existing) return existing
+  const tid = crypto.randomUUID()
+  setTournamentIdInUrl(tid)
+  return tid
 }
 
 export async function ensureTournamentRow(tid: string) {
