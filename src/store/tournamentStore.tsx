@@ -36,6 +36,7 @@ type Action =
       playerIds: [PlayerId | null, PlayerId | null]
     }
   | { type: 'schedule.generate' }
+  | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number] }
   | { type: 'match.unlock'; matchId: MatchId }
   | { type: 'match.score.set'; matchId: MatchId; score?: { a: number; b: number } }
 
@@ -121,6 +122,31 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
         return prev?.score ? { ...m, score: prev.score, completedAt: prev.completedAt } : m
       })
       return touch({ ...state, matches: merged })
+    }
+    case 'matches.upsert': {
+      const incoming = action.match
+      const exists = state.matches.some((x) => x.id === incoming.id)
+      const matches = exists
+        ? state.matches.map((x) => {
+            if (x.id !== incoming.id) return x
+            // Never let missing/empty incoming fields clobber an existing match's structural identity.
+            return {
+              ...x,
+              divisionId: incoming.divisionId ? incoming.divisionId : x.divisionId,
+              round: incoming.round === 1 || incoming.round === 2 || incoming.round === 3 ? incoming.round : x.round,
+              matchupIndex:
+                incoming.matchupIndex === 0 || incoming.matchupIndex === 1 ? incoming.matchupIndex : x.matchupIndex,
+              eventType: incoming.eventType ? incoming.eventType : x.eventType,
+              seed: incoming.seed > 0 ? incoming.seed : x.seed,
+              court: incoming.court > 0 ? incoming.court : x.court,
+              clubA: incoming.clubA ? incoming.clubA : x.clubA,
+              clubB: incoming.clubB ? incoming.clubB : x.clubB,
+              score: incoming.score,
+              completedAt: incoming.completedAt,
+            }
+          })
+        : [...state.matches, incoming]
+      return touch({ ...state, matches })
     }
     case 'match.unlock': {
       const matches = state.matches.map((m) => (m.id === action.matchId ? { ...m, completedAt: undefined } : m))
@@ -337,31 +363,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             }, 0)
           },
           onRemoteMatchChange: (m) => {
-            // Apply match row changes into local matches array
+            // Apply match row changes without touching core state (prevents overwriting club/player edits while typing).
             isApplyingRemote.current = true
-            const current = stateRef.current
-            const matches = current.matches.some((x) => x.id === m.id)
-              ? current.matches.map((x) => {
-                  if (x.id !== m.id) return x
-                  // Some Supabase realtime payloads may omit non-score columns depending on replica identity / migration state.
-                  // Never let "empty" incoming fields clobber an existing match's structural identity.
-                  return {
-                    ...x,
-                    divisionId: m.divisionId ? m.divisionId : x.divisionId,
-                    round: m.round === 1 || m.round === 2 || m.round === 3 ? m.round : x.round,
-                    matchupIndex: m.matchupIndex === 0 || m.matchupIndex === 1 ? m.matchupIndex : x.matchupIndex,
-                    eventType: m.eventType ? m.eventType : x.eventType,
-                    seed: m.seed > 0 ? m.seed : x.seed,
-                    court: m.court > 0 ? m.court : x.court,
-                    clubA: m.clubA ? m.clubA : x.clubA,
-                    clubB: m.clubB ? m.clubB : x.clubB,
-                    // Scores and completion should always apply (including clearing)
-                    score: m.score,
-                    completedAt: m.completedAt,
-                  }
-                })
-              : [...current.matches, m]
-            dispatch({ type: 'import', state: { ...current, matches, updatedAt: new Date().toISOString() } })
+            dispatch({ type: 'matches.upsert', match: m })
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)

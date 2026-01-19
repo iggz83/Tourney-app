@@ -4,6 +4,7 @@ import { seedKey } from '../domain/keys'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTournamentStore } from '../store/tournamentStore'
 import { normalizeTournamentState } from '../store/tournamentStore'
+import { CommitInput } from '../components/CommitInput'
 import {
   clearTournamentIdFromUrl,
   ensureTournamentIdInUrl,
@@ -153,11 +154,11 @@ export function SetupPage() {
                 <div className="text-xs text-slate-500">acronym</div>
               </div>
               <label className="block text-xs font-semibold text-slate-400">Full name</label>
-              <input
+              <CommitInput
                 className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
-                value={c.name}
-                onChange={(e) => actions.setClubName(c.id, e.target.value)}
                 placeholder="e.g. North Pickleball Club"
+                value={c.name}
+                onCommit={(next) => actions.setClubName(c.id, next)}
               />
             </div>
           ))}
@@ -382,17 +383,17 @@ export function SetupPage() {
                       <div className="col-span-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs text-slate-300">
                         {p.gender}
                       </div>
-                      <input
+                      <CommitInput
                         className="col-span-5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
-                        value={p.firstName}
-                        onChange={(e) => actions.updatePlayer(p.id, e.target.value, p.lastName)}
                         placeholder="First"
+                        value={p.firstName}
+                        onCommit={(next) => actions.updatePlayer(p.id, next, p.lastName)}
                       />
-                      <input
+                      <CommitInput
                         className="col-span-5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
-                        value={p.lastName}
-                        onChange={(e) => actions.updatePlayer(p.id, p.firstName, e.target.value)}
                         placeholder="Last"
+                        value={p.lastName}
+                        onCommit={(next) => actions.updatePlayer(p.id, p.firstName, next)}
                       />
                     </div>
                   ))}
