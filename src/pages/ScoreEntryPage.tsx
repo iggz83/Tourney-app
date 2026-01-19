@@ -241,7 +241,7 @@ export function ScoreEntryPage() {
 
       <div className="overflow-x-auto rounded-xl border border-slate-800">
         <div className="min-w-[1200px]">
-          <div className="grid grid-cols-[120px_44px_54px_120px_110px_120px_1fr_230px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+          <div className="grid grid-cols-[120px_44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div className="whitespace-nowrap">{headerButton('ID', 'id')}</div>
             <div>{headerButton('R', 'round')}</div>
             <div>{headerButton('Ct', 'court')}</div>
@@ -274,25 +274,25 @@ export function ScoreEntryPage() {
             const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
 
             return (
-              <div key={m.id} className="grid grid-cols-[120px_44px_54px_120px_110px_120px_1fr_230px] items-center gap-2 px-3 py-2 text-sm">
+              <div key={m.id} className="grid grid-cols-[120px_44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] items-center gap-2 px-3 py-2 text-sm">
                 <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
                 <div className="text-slate-300">{m.round}</div>
                 <div className="text-slate-300">{m.court}</div>
                 <div className="truncate text-slate-200">{divisionNameById.get(m.divisionId) ?? m.divisionId}</div>
                 <div className="text-slate-200">{eventLabel(m)}</div>
-                <div>
+                <div className="min-w-0">
                   <div className="truncate text-slate-100">
                     <span className={aWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubA)}</span>
                     <span className="mx-1 text-slate-500">vs</span>
                     <span className={bWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubB)}</span>
                   </div>
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 overflow-hidden">
                   <div className="truncate text-xs text-slate-300">
                     {aNames} <span className="text-slate-600">|</span> {bNames}
                   </div>
                 </div>
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex shrink-0 items-center justify-end gap-2">
                   <input
                     inputMode="numeric"
                     className={[
@@ -356,13 +356,6 @@ export function ScoreEntryPage() {
                         }}
                       >
                         Save
-                      </button>
-                      <button
-                        className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
-                        title="Clear draft"
-                        onClick={() => setDrafts((prev) => ({ ...prev, [m.id]: { a: '', b: '' } }))}
-                      >
-                        Clear
                       </button>
                     </>
                   )}
