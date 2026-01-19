@@ -248,9 +248,14 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   const lastSentAt = useRef<string | null>(null)
   const connRef = useRef<ReturnType<typeof connectCloudSync> | null>(null)
   const stateUpdatedAtRef = useRef<string>(state.updatedAt)
+  const stateRef = useRef<TournamentStateV2>(state)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(state))
+  }, [state])
+
+  useEffect(() => {
+    stateRef.current = state
   }, [state])
 
   useEffect(() => {
@@ -288,16 +293,18 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         try {
           const remote = await fetchTournamentState(tid)
           if (cancelled) return
-          if (remote && remote.updatedAt && stateUpdatedAtRef.current && remote.updatedAt > stateUpdatedAtRef.current) {
+          const local = stateRef.current
+          if (remote && remote.updatedAt && local.updatedAt && remote.updatedAt > local.updatedAt) {
             isApplyingRemote.current = true
             dispatch({ type: 'import', state: remote })
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
-          } else if (!remote) {
-            // Initialize cloud state so other devices opening the link see this tournament immediately.
+          } else {
+            // Remote is missing or older than local — ensure cloud has the latest local state.
+            // This also covers the case where the user made changes before the connection was established.
             // eslint-disable-next-line no-void
-            void conn.pushState(state)
+            void conn.pushState(local)
           }
         } catch {
           // ignore fetch/init issues; realtime may still work
