@@ -17,6 +17,17 @@ In your Supabase project:
 - Open **SQL Editor**
 - Run the script at `supabase/schema.sql`
 
+### 1b) (Recommended) Auto-apply future DB changes
+
+This repo includes a GitHub Action that can auto-apply migrations in `supabase/migrations/` to your Supabase project.
+
+Add these **GitHub repo secrets** (Repo → Settings → Secrets and variables → Actions):
+- `SUPABASE_ACCESS_TOKEN`: Supabase account access token
+- `SUPABASE_PROJECT_REF`: your project ref (the part before `.supabase.co`)
+- `SUPABASE_DB_PASSWORD`: your project’s database password
+
+After that, any commit that changes `supabase/migrations/**` will automatically run `supabase db push`.
+
 ### 2) Get Supabase credentials
 
 In Supabase:

@@ -1,5 +1,5 @@
--- Inter-Club Tournament Tracker - Supabase schema
--- Run this in Supabase SQL editor.
+-- Inter-Club Tournament Tracker - Supabase migration
+-- Idempotent: safe to re-run
 
 create table if not exists public.tournaments (
   id text primary key,
