@@ -153,7 +153,21 @@ export function SetupPage() {
               onClick={async () => {
                 ensureTournamentIdInUrl()
                 try {
-                  await navigator.clipboard.writeText(window.location.href)
+                  const u = new URL(window.location.href)
+                  // Always include cloud=1 for the shared TV link.
+                  if (u.hash.includes('#/')) {
+                    const parts = u.hash.split('?')
+                    const queryPart = parts.length > 1 ? parts[1] : ''
+                    const sp = new URLSearchParams(queryPart ?? '')
+                    sp.set('cloud', '1')
+                    // force TV route
+                    u.hash = `#/tv?${sp.toString()}`
+                  } else {
+                    u.searchParams.set('cloud', '1')
+                    u.pathname = u.pathname.replace(/\/setup\/?$/, '/tv')
+                    if (!u.pathname.endsWith('/tv')) u.pathname = '/tv'
+                  }
+                  await navigator.clipboard.writeText(u.toString())
                   setCopied(true)
                   setTimeout(() => setCopied(false), 1000)
                 } catch {
@@ -161,7 +175,7 @@ export function SetupPage() {
                 }
               }}
             >
-              {copied ? 'Copied!' : 'Copy link'}
+              {copied ? 'Copied!' : 'Copy TV link'}
             </button>
             <button
               className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
