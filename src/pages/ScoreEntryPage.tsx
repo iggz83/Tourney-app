@@ -233,12 +233,12 @@ export function ScoreEntryPage() {
       td:nth-child(3) { width: 120px; }
       td:nth-child(4) { width: 110px; }
       td:nth-child(5) { width: 120px; }
-      td:nth-child(7) { width: 110px; }
+      td:nth-child(7) { width: 130px; }
       .small { color: #64748b; }
       .scoreBoxes { display: grid; gap: 4px; }
       .boxRow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
       .teamTag { font-weight: 700; font-size: 11px; color: #0f172a; }
-      .box { display: inline-block; width: 44px; height: 18px; border: 2px solid #0f172a; border-radius: 3px; text-align: center; line-height: 16px; font-weight: 700; font-size: 12px; }
+      .box { display: inline-block; width: 40px; height: 28px; border: 2px solid #0f172a; border-radius: 4px; text-align: center; line-height: 26px; font-weight: 700; font-size: 13px; }
       @media print { body { margin: 0.35in; } }
     </style>
   </head>
