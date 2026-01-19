@@ -50,7 +50,7 @@ export function TvPage() {
 
       return { division: d, women, men }
     })
-  }, [playerStandingByPlayerId, playerStandings, state.divisions, state.players])
+  }, [playerStandingByPlayerId, state.divisions, state.players])
 
   return (
     <div className="px-6 py-4">
@@ -99,7 +99,6 @@ export function TvPage() {
               <div key={division.id} className="rounded-lg border border-slate-800 bg-slate-950/20 p-4">
                 <div className="mb-2 flex items-baseline justify-between gap-2">
                   <div className="text-base font-semibold text-slate-100 truncate">{division.name}</div>
-                  <div className="text-sm text-slate-500">{division.code}</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
