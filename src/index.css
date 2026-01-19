@@ -12,3 +12,20 @@ body {
 body {
   margin: 0;
 }
+
+/* Improve native <select> contrast (especially on Windows where option popups can be light). */
+select {
+  background-color: color-mix(in oklab, rgb(2 6 23) 85%, transparent);
+  color: rgb(226 232 240);
+  border-color: rgb(51 65 85);
+}
+
+select:focus {
+  outline: none;
+  border-color: rgb(71 85 105);
+}
+
+select option {
+  background-color: rgb(2 6 23);
+  color: rgb(226 232 240);
+}

@@ -78,7 +78,7 @@ export function ScoreEntryPage() {
           <label className="text-sm text-slate-300">
             <span className="mr-2 text-xs text-slate-400">Division</span>
             <select
-              className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
               value={divisionId}
               onChange={(e) => setDivisionId(e.target.value)}
             >
@@ -93,7 +93,7 @@ export function ScoreEntryPage() {
           <label className="text-sm text-slate-300">
             <span className="mr-2 text-xs text-slate-400">Round</span>
             <select
-              className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm"
+              className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
               value={round}
               onChange={(e) => setRound(e.target.value as any)}
             >

@@ -354,7 +354,7 @@ export function SetupPage() {
             <label className="text-sm text-slate-300">
               <span className="mr-2 text-xs text-slate-400">Roster division</span>
               <select
-                className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm"
+                className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
                 value={divisionId}
                 onChange={(e) => setDivisionId(e.target.value)}
               >
@@ -417,7 +417,7 @@ export function SetupPage() {
             <label className="text-sm text-slate-300">
               <span className="mr-2 text-xs text-slate-400">Division</span>
               <select
-                className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm"
+                className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
                 value={divisionId}
                 onChange={(e) => setDivisionId(e.target.value)}
               >
@@ -431,7 +431,7 @@ export function SetupPage() {
             <label className="text-sm text-slate-300">
               <span className="mr-2 text-xs text-slate-400">Club</span>
               <select
-                className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm"
+                className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
                 value={clubId}
                 onChange={(e) => setClubId(e.target.value as ClubId)}
               >
@@ -493,7 +493,7 @@ export function SetupPage() {
                   <div className="col-span-3 text-sm text-slate-100">{ev.label}</div>
                   <div className="col-span-4">
                     <select
-                      className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm"
+                      className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
                       value={player1Id}
                       onChange={(e) => {
                         const next1 = (e.target.value || null) as PlayerId | null
@@ -517,7 +517,7 @@ export function SetupPage() {
                   </div>
                   <div className="col-span-4">
                     <select
-                      className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm"
+                      className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
                       value={player2Id}
                       onChange={(e) => {
                         const next2 = (e.target.value || null) as PlayerId | null
