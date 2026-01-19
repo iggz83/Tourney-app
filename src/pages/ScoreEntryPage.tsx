@@ -45,11 +45,20 @@ function parseScore(v: string): number | undefined {
   return Math.floor(n)
 }
 
+type SortKey = 'id' | 'round' | 'court' | 'division' | 'event' | 'match' | 'players' | 'score'
+type SortDir = 'asc' | 'desc'
+
+function cmp(a: string | number, b: string | number) {
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
+}
+
 export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
   const [round, setRound] = useState<'all' | '1' | '2' | '3'>('all')
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
 
   const playersById = useMemo(() => getPlayersById(state), [state])
 
@@ -65,7 +74,104 @@ export function ScoreEntryPage() {
   // Non-TV view uses acronyms (club ids) even if full names are configured for TV.
   const clubLabel = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.id])), [state.clubs])
 
+  const sorted = useMemo(() => {
+    if (!sort) return filtered
+
+    const dirMul = sort.dir === 'asc' ? 1 : -1
+
+    const withIdx = filtered.map((m, idx) => ({ m, idx }))
+    withIdx.sort((x, y) => {
+      const a = x.m
+      const b = y.m
+
+      const divCodeA = divisionCodeById.get(a.divisionId) ?? a.divisionId
+      const divCodeB = divisionCodeById.get(b.divisionId) ?? b.divisionId
+      const evA = eventLabel(a)
+      const evB = eventLabel(b)
+      const idA = `${divCodeA}-R${a.round}-C${a.court}-${evA.replace(/\s+/g, '')}`
+      const idB = `${divCodeB}-R${b.round}-C${b.court}-${evB.replace(/\s+/g, '')}`
+
+      const matchA = `${clubLabel.get(a.clubA) ?? a.clubA} vs ${clubLabel.get(a.clubB) ?? a.clubB}`
+      const matchB = `${clubLabel.get(b.clubA) ?? b.clubA} vs ${clubLabel.get(b.clubB) ?? b.clubB}`
+
+      const scoreA = a.score ? a.score.a * 100 + a.score.b : -1
+      const scoreB = b.score ? b.score.a * 100 + b.score.b : -1
+
+      let res = 0
+      switch (sort.key) {
+        case 'id':
+          res = cmp(idA, idB)
+          break
+        case 'round':
+          res = cmp(a.round, b.round)
+          break
+        case 'court':
+          res = cmp(a.court, b.court)
+          break
+        case 'division':
+          res = cmp(divisionNameById.get(a.divisionId) ?? a.divisionId, divisionNameById.get(b.divisionId) ?? b.divisionId)
+          break
+        case 'event':
+          res = cmp(evA, evB)
+          break
+        case 'match':
+          res = cmp(matchA, matchB)
+          break
+        case 'players': {
+          // Sort by the rendered players string (cheap + stable enough)
+          const divisionConfigA = getDivisionConfig(state as TournamentStateV2, a.divisionId)
+          const divisionConfigB = getDivisionConfig(state as TournamentStateV2, b.divisionId)
+          const aPairA = getMatchPlayerIdsForClub({ match: a, clubId: a.clubA, divisionConfig: divisionConfigA })
+          const bPairA = getMatchPlayerIdsForClub({ match: a, clubId: a.clubB, divisionConfig: divisionConfigA })
+          const aPairB = getMatchPlayerIdsForClub({ match: b, clubId: b.clubA, divisionConfig: divisionConfigB })
+          const bPairB = getMatchPlayerIdsForClub({ match: b, clubId: b.clubB, divisionConfig: divisionConfigB })
+          const aNamesA = aPairA ? aPairA.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+          const bNamesA = bPairA ? bPairA.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+          const aNamesB = aPairB ? aPairB.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+          const bNamesB = bPairB ? bPairB.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+          res = cmp(`${aNamesA} | ${bNamesA}`, `${aNamesB} | ${bNamesB}`)
+          break
+        }
+        case 'score':
+          res = cmp(scoreA, scoreB)
+          break
+      }
+
+      if (res !== 0) return res * dirMul
+      // Stable fallback
+      return (x.idx - y.idx) * dirMul
+    })
+
+    return withIdx.map((x) => x.m)
+  }, [filtered, sort, divisionCodeById, divisionNameById, clubLabel, playersById, state])
+
   const scheduleMissing = state.matches.length === 0
+
+  function headerButton(label: string, key: SortKey, alignRight = false) {
+    const active = sort?.key === key
+    const dir = active ? sort!.dir : undefined
+    const glyph = !active ? '' : dir === 'asc' ? ' ▲' : ' ▼'
+    return (
+      <button
+        type="button"
+        className={[
+          'w-full select-none text-left hover:text-white',
+          alignRight ? 'text-right' : '',
+          active ? 'text-slate-100' : 'text-slate-300',
+        ].join(' ')}
+        onClick={() => {
+          setSort((prev) => {
+            if (!prev || prev.key !== key) return { key, dir: 'asc' }
+            return { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+          })
+        }}
+        title="Sort"
+      >
+        {label}
+        <span className="text-slate-500">{glyph}</span>
+      </button>
+    )
+  }
 
   return (
     <div className="space-y-4">
@@ -121,18 +227,18 @@ export function ScoreEntryPage() {
       <div className="overflow-x-auto rounded-xl border border-slate-800">
         <div className="min-w-[1200px]">
           <div className="grid grid-cols-[120px_44px_54px_120px_110px_120px_1fr_230px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
-            <div className="whitespace-nowrap">ID</div>
-            <div>R</div>
-            <div>Ct</div>
-            <div>Division</div>
-            <div>Event</div>
-            <div>Match</div>
-            <div>Players</div>
-            <div className="text-right">Score</div>
+            <div className="whitespace-nowrap">{headerButton('ID', 'id')}</div>
+            <div>{headerButton('R', 'round')}</div>
+            <div>{headerButton('Ct', 'court')}</div>
+            <div>{headerButton('Division', 'division')}</div>
+            <div>{headerButton('Event', 'event')}</div>
+            <div>{headerButton('Match', 'match')}</div>
+            <div>{headerButton('Players', 'players')}</div>
+            <div className="text-right">{headerButton('Score', 'score', true)}</div>
           </div>
 
           <div className="divide-y divide-slate-800 bg-slate-950/30">
-          {filtered.map((m) => {
+          {sorted.map((m) => {
             const computed = computeMatch(m)
             const divisionConfig = getDivisionConfig(state as TournamentStateV2, m.divisionId)
             const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
