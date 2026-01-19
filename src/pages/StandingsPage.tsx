@@ -83,7 +83,7 @@ export function StandingsPage() {
             <div className="col-span-1 text-right">W</div>
             <div className="col-span-1 text-right">L</div>
             <div className="col-span-3 text-right whitespace-nowrap">PF / PA</div>
-            <div className="col-span-2 text-right whitespace-nowrap">Diff</div>
+            <div className="col-span-1 text-right whitespace-nowrap">Diff</div>
           </div>
           <div className="divide-y divide-slate-800 bg-slate-950/30">
             {playerStandings.slice(0, 16).map((row, idx) => {
@@ -100,7 +100,7 @@ export function StandingsPage() {
                   <div className="col-span-3 text-right tabular-nums text-slate-300 whitespace-nowrap">
                     {row.pointsFor} / {row.pointsAgainst}
                   </div>
-                  <div className="col-span-2 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
+                  <div className="col-span-1 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
                     {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                   </div>
                 </div>
