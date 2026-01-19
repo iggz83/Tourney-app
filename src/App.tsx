@@ -57,7 +57,7 @@ export default function App() {
   return (
     <Shell>
       <Routes>
-        <Route path="/" element={<Navigate to={withSearch('/standings', location.search || '')} replace />} />
+        <Route path="/" element={<Navigate to={withSearch('/setup', location.search || '')} replace />} />
         <Route path="/setup" element={<SetupPage />} />
         <Route path="/scores" element={<ScoreEntryPage />} />
         <Route path="/standings" element={<StandingsPage />} />
