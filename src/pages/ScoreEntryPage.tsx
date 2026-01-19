@@ -183,11 +183,23 @@ export function ScoreEntryPage() {
         const evShort = eventLabel(m).replace(/\s+/g, '')
         const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
 
-        const score = m.score ? `${m.score.a}-${m.score.b}` : ''
+        const scoreA = m.score?.a ?? null
+        const scoreB = m.score?.b ?? null
         const match = `${clubLabel.get(m.clubA) ?? m.clubA} vs ${clubLabel.get(m.clubB) ?? m.clubB}`
         const division = divisionNameById.get(m.divisionId) ?? m.divisionId
         const event = eventLabel(m)
         const players = `${aNames} | ${bNames}`
+
+        const scoreHtml = `<div class="scoreBoxes">
+  <div class="boxRow">
+    <span class="teamTag">${escapeHtml(m.clubA)}</span>
+    <span class="box">${scoreA === null ? '&nbsp;' : escapeHtml(String(scoreA))}</span>
+  </div>
+  <div class="boxRow">
+    <span class="teamTag">${escapeHtml(m.clubB)}</span>
+    <span class="box">${scoreB === null ? '&nbsp;' : escapeHtml(String(scoreB))}</span>
+  </div>
+</div>`
 
         return `<tr>
   <td>${escapeHtml(rowId)}</td>
@@ -197,7 +209,7 @@ export function ScoreEntryPage() {
   <td>${escapeHtml(event)}</td>
   <td>${escapeHtml(match)}</td>
   <td>${escapeHtml(players)}</td>
-  <td style="text-align:right; white-space:nowrap;">${escapeHtml(score)}</td>
+  <td>${scoreHtml}</td>
 </tr>`
       })
       .join('\n')
@@ -212,6 +224,7 @@ export function ScoreEntryPage() {
       body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
       h1 { font-size: 18px; margin: 0 0 6px; }
       .meta { font-size: 12px; color: #334155; margin: 0 0 12px; }
+      .hint { font-size: 12px; color: #334155; margin: 0 0 12px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       th, td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; font-size: 12px; }
       th { background: #f1f5f9; text-align: left; }
@@ -221,8 +234,12 @@ export function ScoreEntryPage() {
       td:nth-child(4) { width: 120px; }
       td:nth-child(5) { width: 110px; }
       td:nth-child(6) { width: 120px; }
-      td:nth-child(8) { width: 70px; }
+      td:nth-child(8) { width: 110px; }
       .small { color: #64748b; }
+      .scoreBoxes { display: grid; gap: 4px; }
+      .boxRow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+      .teamTag { font-weight: 700; font-size: 11px; color: #0f172a; }
+      .box { display: inline-block; width: 44px; height: 18px; border: 2px solid #0f172a; border-radius: 3px; text-align: center; line-height: 16px; font-weight: 700; font-size: 12px; }
       @media print { body { margin: 0.35in; } }
     </style>
   </head>
@@ -234,6 +251,7 @@ export function ScoreEntryPage() {
       )}</div>
       <div class="small"><b>Printed:</b> ${escapeHtml(new Date().toLocaleString())} &nbsp; <b>Rows:</b> ${sorted.length}</div>
     </div>
+    <div class="hint"><b>Instructions:</b> Write scores in the boxes (team acronyms shown). Optional: circle the winning club in the <b>Match</b> column.</div>
     <table>
       <thead>
         <tr>
@@ -244,7 +262,7 @@ export function ScoreEntryPage() {
           <th>Event</th>
           <th>Match</th>
           <th>Players</th>
-          <th style="text-align:right;">Score</th>
+          <th>Score</th>
         </tr>
       </thead>
       <tbody>
