@@ -20,6 +20,22 @@ function playerLabel(p: { firstName: string; lastName: string }) {
   return full.length ? full : '(unnamed)'
 }
 
+function rosterSlotLabel(p: { id: string; gender: 'M' | 'F' }) {
+  // Player ids are like: <divisionId>:<clubId>:W1 or ...:M4
+  const m = /:(W|M)(\d)$/.exec(p.id)
+  const n = m ? m[2] : p.id.slice(-1)
+  const prefix = p.gender === 'F' ? 'W' : 'M'
+  return `${prefix}${n}`
+}
+
+function rosterSortKey(p: { id: string; gender: 'M' | 'F' }) {
+  const m = /:(W|M)(\d)$/.exec(p.id)
+  const n = m ? Number(m[2]) : Number(p.id.slice(-1))
+  const num = Number.isFinite(n) ? n : 99
+  // Women first, then Men; each in numeric order.
+  return (p.gender === 'F' ? 0 : 1) * 10 + num
+}
+
 function download(filename: string, text: string) {
   const blob = new Blob([text], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
@@ -396,7 +412,10 @@ export function SetupPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {state.clubs.map((club) => {
-            const players = state.players.filter((p) => p.clubId === club.id && p.divisionId === divisionId)
+            const players = state.players
+              .filter((p) => p.clubId === club.id && p.divisionId === divisionId)
+              .slice()
+              .sort((a, b) => rosterSortKey(a) - rosterSortKey(b))
             return (
               <div key={club.id} className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
                 <div className="mb-3 flex items-center justify-between">
@@ -406,7 +425,10 @@ export function SetupPage() {
                 <div className="space-y-2">
                   {players.map((p) => (
                     <div key={p.id} className="grid grid-cols-12 gap-2">
-                      <div className="col-span-2 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs text-slate-300">
+                      <div className="col-span-1 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-center text-xs font-semibold text-slate-200">
+                        {rosterSlotLabel(p)}
+                      </div>
+                      <div className="col-span-1 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-center text-xs text-slate-300">
                         {p.gender}
                       </div>
                       <CommitInput
