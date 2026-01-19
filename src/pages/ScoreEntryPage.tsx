@@ -53,6 +53,15 @@ function cmp(a: string | number, b: string | number) {
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
 }
 
+function escapeHtml(v: string) {
+  return v
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
 export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
@@ -153,6 +162,113 @@ export function ScoreEntryPage() {
 
   const scheduleMissing = state.matches.length === 0
 
+  function handlePrintFiltered() {
+    const divisionLabel =
+      divisionId === 'all' ? 'All divisions' : divisionNameById.get(divisionId) ?? divisionId
+    const roundLabel = round === 'all' ? 'All rounds' : `Round ${round}`
+    const eventLabelFilter =
+      eventFilter === 'all'
+        ? 'All events'
+        : SEEDED_EVENTS.find((ev) => `${ev.eventType}:${ev.seed}` === eventFilter)?.label ?? eventFilter
+
+    const rowsHtml = sorted
+      .map((m) => {
+        const divisionConfig = getDivisionConfig(state as TournamentStateV2, m.divisionId)
+        const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
+        const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+        const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+        const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+
+        const divCode = divisionCodeById.get(m.divisionId) ?? m.divisionId
+        const evShort = eventLabel(m).replace(/\s+/g, '')
+        const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
+
+        const score = m.score ? `${m.score.a}-${m.score.b}` : ''
+        const match = `${clubLabel.get(m.clubA) ?? m.clubA} vs ${clubLabel.get(m.clubB) ?? m.clubB}`
+        const division = divisionNameById.get(m.divisionId) ?? m.divisionId
+        const event = eventLabel(m)
+        const players = `${aNames} | ${bNames}`
+
+        return `<tr>
+  <td>${escapeHtml(rowId)}</td>
+  <td style="text-align:right;">${m.round}</td>
+  <td style="text-align:right;">${m.court}</td>
+  <td>${escapeHtml(division)}</td>
+  <td>${escapeHtml(event)}</td>
+  <td>${escapeHtml(match)}</td>
+  <td>${escapeHtml(players)}</td>
+  <td style="text-align:right; white-space:nowrap;">${escapeHtml(score)}</td>
+</tr>`
+      })
+      .join('\n')
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Pickleball Tournament Tracker - Scores</title>
+    <style>
+      :root { color-scheme: light; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; }
+      h1 { font-size: 18px; margin: 0 0 6px; }
+      .meta { font-size: 12px; color: #334155; margin: 0 0 12px; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; font-size: 12px; }
+      th { background: #f1f5f9; text-align: left; }
+      td:nth-child(1) { width: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 11px; }
+      td:nth-child(2) { width: 44px; }
+      td:nth-child(3) { width: 56px; }
+      td:nth-child(4) { width: 120px; }
+      td:nth-child(5) { width: 110px; }
+      td:nth-child(6) { width: 120px; }
+      td:nth-child(8) { width: 70px; }
+      .small { color: #64748b; }
+      @media print { body { margin: 0.35in; } }
+    </style>
+  </head>
+  <body>
+    <h1>Scores (Filtered)</h1>
+    <div class="meta">
+      <div><b>Division:</b> ${escapeHtml(divisionLabel)} &nbsp; <b>Round:</b> ${escapeHtml(roundLabel)} &nbsp; <b>Event:</b> ${escapeHtml(
+        eventLabelFilter,
+      )}</div>
+      <div class="small"><b>Printed:</b> ${escapeHtml(new Date().toLocaleString())} &nbsp; <b>Rows:</b> ${sorted.length}</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th style="text-align:right;">R</th>
+          <th style="text-align:right;">Ct</th>
+          <th>Division</th>
+          <th>Event</th>
+          <th>Match</th>
+          <th>Players</th>
+          <th style="text-align:right;">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  </body>
+</html>`
+
+    const w = window.open('', '_blank', 'noopener,noreferrer,width=1100,height=700')
+    if (!w) {
+      alert('Pop-up blocked. Please allow pop-ups for printing.')
+      return
+    }
+    w.document.open()
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => {
+      w.print()
+      w.close()
+    }, 50)
+  }
+
   function headerButton(label: string, key: SortKey, alignRight = false) {
     const active = sort?.key === key
     const dir = active ? sort!.dir : undefined
@@ -235,6 +351,13 @@ export function ScoreEntryPage() {
             onClick={() => actions.generateSchedule()}
           >
             Generate schedule
+          </button>
+          <button
+            className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+            onClick={handlePrintFiltered}
+            title="Print the currently filtered rows"
+          >
+            Print
           </button>
           <button
             className="rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40"

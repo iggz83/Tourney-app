@@ -53,54 +53,36 @@ export function TvPage() {
   }, [playerStandingByPlayerId, playerStandings, state.divisions, state.players])
 
   return (
-    <div className="space-y-6 px-6 py-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-wide">Live Standings</h1>
-          <div className="text-sm text-slate-300">Wins → Point Differential</div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
-            onClick={async () => {
-              try {
-                if (document.fullscreenElement) await document.exitFullscreen()
-                else await document.documentElement.requestFullscreen()
-              } catch {
-                // ignore
-              }
-            }}
-          >
-            Fullscreen
-          </button>
-          <div className="text-sm text-slate-400">{new Date(state.updatedAt).toLocaleTimeString()}</div>
-        </div>
+    <div className="px-4 py-3">
+      <div className="mb-2 flex justify-end text-xs text-slate-500 tabular-nums">
+        Updated {new Date(state.updatedAt).toLocaleTimeString()}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-          <h2 className="mb-4 text-lg font-semibold">Club Standings</h2>
-          <div className="space-y-3">
+      <div className="grid grid-cols-12 gap-3">
+        <section className="col-span-5 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-base font-semibold">Club Standings</h2>
+            <div className="text-xs text-slate-500">W-L • Diff</div>
+          </div>
+
+          <div className="space-y-2">
             {clubStandings.map((row, idx) => (
               <div
                 key={row.clubId}
-                className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/30 px-4 py-3"
+                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/30 px-3 py-2"
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-8 text-center text-xl font-bold text-slate-200">{idx + 1}</div>
-                  <div>
-                    <div className="text-xl font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
-                    <div className="text-sm text-slate-400">
-                      PF {row.pointsFor} • PA {row.pointsAgainst}
-                    </div>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-7 text-center text-lg font-bold text-slate-200">{idx + 1}</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-base font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold">
+                <div className="shrink-0 text-right tabular-nums">
+                  <div className="text-xl font-bold">
                     {row.wins}
                     <span className="text-slate-500">-{row.losses}</span>
                   </div>
-                  <div className="text-lg font-semibold text-slate-200">
+                  <div className="text-sm font-semibold text-slate-200">
                     {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                   </div>
                 </div>
@@ -109,40 +91,39 @@ export function TvPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-          <h2 className="mb-4 text-lg font-semibold">Top Individuals (by division)</h2>
-          <div className="grid gap-4">
+        <section className="col-span-7 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-base font-semibold">Top Individuals</h2>
+            <div className="text-xs text-slate-500">Top 3 Women + Top 3 Men per division</div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             {topByDivision.map(({ division, women, men }) => (
-              <div key={division.id} className="rounded-xl border border-slate-800 bg-slate-950/20 p-4">
-                <div className="mb-3 flex items-baseline justify-between gap-3">
-                  <div className="text-base font-semibold text-slate-100">{division.name}</div>
-                  <div className="text-sm text-slate-500">{division.code}</div>
+              <div key={division.id} className="rounded-lg border border-slate-800 bg-slate-950/20 p-3">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <div className="text-sm font-semibold text-slate-100 truncate">{division.name}</div>
+                  <div className="text-xs text-slate-500">{division.code}</div>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <div className="mb-2 text-sm font-semibold text-slate-200">Women</div>
-                    <div className="space-y-2">
+                    <div className="mb-1 text-xs font-semibold text-slate-300">Women</div>
+                    <div className="space-y-1">
                       {women.map(({ p, s }, idx) => (
-                        <div
-                          key={p.id}
-                          className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/30 px-4 py-3"
-                        >
-                          <div className="flex items-center gap-4 min-w-0">
-                            <div className="w-8 text-center text-lg font-bold text-slate-300">{idx + 1}</div>
+                        <div key={p.id} className="flex items-center justify-between gap-2 rounded-md bg-slate-950/30 px-2 py-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-5 text-center text-sm font-bold text-slate-300">{idx + 1}</div>
                             <div className="min-w-0">
-                              <div className="truncate text-lg font-semibold">{displayPlayerName(p)}</div>
-                              <div className="truncate text-sm text-slate-400">{clubNameById.get(p.clubId) ?? p.clubId}</div>
+                              <div className="truncate text-sm font-semibold text-slate-100">
+                                {displayPlayerName(p)}{' '}
+                                <span className="text-slate-500 font-medium">
+                                  ({clubNameById.get(p.clubId) ?? p.clubId})
+                                </span>
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-2xl font-bold">
-                              {s.wins}
-                              <span className="text-slate-500">-{s.losses}</span>
-                            </div>
-                            <div className="text-sm font-semibold text-slate-200">
-                              {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
-                            </div>
+                          <div className="shrink-0 text-right tabular-nums text-xs text-slate-200 whitespace-nowrap">
+                            {s.wins}-{s.losses} • {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
                           </div>
                         </div>
                       ))}
@@ -150,28 +131,23 @@ export function TvPage() {
                   </div>
 
                   <div>
-                    <div className="mb-2 text-sm font-semibold text-slate-200">Men</div>
-                    <div className="space-y-2">
+                    <div className="mb-1 text-xs font-semibold text-slate-300">Men</div>
+                    <div className="space-y-1">
                       {men.map(({ p, s }, idx) => (
-                        <div
-                          key={p.id}
-                          className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/30 px-4 py-3"
-                        >
-                          <div className="flex items-center gap-4 min-w-0">
-                            <div className="w-8 text-center text-lg font-bold text-slate-300">{idx + 1}</div>
+                        <div key={p.id} className="flex items-center justify-between gap-2 rounded-md bg-slate-950/30 px-2 py-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-5 text-center text-sm font-bold text-slate-300">{idx + 1}</div>
                             <div className="min-w-0">
-                              <div className="truncate text-lg font-semibold">{displayPlayerName(p)}</div>
-                              <div className="truncate text-sm text-slate-400">{clubNameById.get(p.clubId) ?? p.clubId}</div>
+                              <div className="truncate text-sm font-semibold text-slate-100">
+                                {displayPlayerName(p)}{' '}
+                                <span className="text-slate-500 font-medium">
+                                  ({clubNameById.get(p.clubId) ?? p.clubId})
+                                </span>
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-2xl font-bold">
-                              {s.wins}
-                              <span className="text-slate-500">-{s.losses}</span>
-                            </div>
-                            <div className="text-sm font-semibold text-slate-200">
-                              {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
-                            </div>
+                          <div className="shrink-0 text-right tabular-nums text-xs text-slate-200 whitespace-nowrap">
+                            {s.wins}-{s.losses} • {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
                           </div>
                         </div>
                       ))}
