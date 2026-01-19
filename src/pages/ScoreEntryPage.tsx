@@ -184,10 +184,6 @@ export function ScoreEntryPage() {
         const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
         const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
 
-        const divCode = divisionCodeById.get(m.divisionId) ?? m.divisionId
-        const evShort = eventLabel(m).replace(/\s+/g, '')
-        const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
-
         const scoreA = m.score?.a ?? null
         const scoreB = m.score?.b ?? null
         const match = `${clubLabel.get(m.clubA) ?? m.clubA} vs ${clubLabel.get(m.clubB) ?? m.clubB}`
@@ -207,7 +203,6 @@ export function ScoreEntryPage() {
 </div>`
 
         return `<tr>
-  <td>${escapeHtml(rowId)}</td>
   <td style="text-align:right;">${m.round}</td>
   <td style="text-align:right;">${m.court}</td>
   <td>${escapeHtml(division)}</td>
@@ -233,13 +228,12 @@ export function ScoreEntryPage() {
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       th, td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; font-size: 12px; }
       th { background: #f1f5f9; text-align: left; }
-      td:nth-child(1) { width: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 11px; }
-      td:nth-child(2) { width: 44px; }
-      td:nth-child(3) { width: 56px; }
-      td:nth-child(4) { width: 120px; }
-      td:nth-child(5) { width: 110px; }
-      td:nth-child(6) { width: 120px; }
-      td:nth-child(8) { width: 110px; }
+      td:nth-child(1) { width: 44px; }
+      td:nth-child(2) { width: 56px; }
+      td:nth-child(3) { width: 120px; }
+      td:nth-child(4) { width: 110px; }
+      td:nth-child(5) { width: 120px; }
+      td:nth-child(7) { width: 110px; }
       .small { color: #64748b; }
       .scoreBoxes { display: grid; gap: 4px; }
       .boxRow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -260,7 +254,6 @@ export function ScoreEntryPage() {
     <table>
       <thead>
         <tr>
-          <th>ID</th>
           <th style="text-align:right;">R</th>
           <th style="text-align:right;">Ct</th>
           <th>Division</th>
