@@ -57,6 +57,7 @@ export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
   const [round, setRound] = useState<'all' | '1' | '2' | '3'>('all')
+  const [eventFilter, setEventFilter] = useState<string>('all')
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
 
@@ -66,8 +67,13 @@ export function ScoreEntryPage() {
     let ms = state.matches
     if (divisionId !== 'all') ms = ms.filter((m) => m.divisionId === divisionId)
     if (round !== 'all') ms = ms.filter((m) => String(m.round) === round)
+    if (eventFilter !== 'all') {
+      const [eventType, seedRaw] = eventFilter.split(':')
+      const seed = Number(seedRaw)
+      ms = ms.filter((m) => m.eventType === (eventType as any) && m.seed === seed)
+    }
     return [...ms].sort(byMatchOrder)
-  }, [state.matches, divisionId, round])
+  }, [state.matches, divisionId, round, eventFilter])
 
   const divisionNameById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.name])), [state.divisions])
   const divisionCodeById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.code])), [state.divisions])
@@ -207,6 +213,21 @@ export function ScoreEntryPage() {
               <option value="1">1</option>
               <option value="2">2</option>
               <option value="3">3</option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-300">
+            <span className="mr-2 text-xs text-slate-400">Event</span>
+            <select
+              className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
+              value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              {SEEDED_EVENTS.map((ev) => (
+                <option key={`${ev.eventType}:${ev.seed}`} value={`${ev.eventType}:${ev.seed}`}>
+                  {ev.label}
+                </option>
+              ))}
             </select>
           </label>
           <button
