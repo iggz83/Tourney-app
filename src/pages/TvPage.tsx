@@ -23,7 +23,34 @@ export function TvPage() {
 
   // TV should use the full club names (configured in Setup -> Club Directory).
   const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name || c.id])), [state.clubs])
-  const playerById = useMemo(() => new Map(state.players.map((p) => [p.id, p])), [state.players])
+  const playerStandingByPlayerId = useMemo(
+    () => new Map(playerStandings.map((row) => [row.playerId, row] as const)),
+    [playerStandings],
+  )
+
+  const topByDivision = useMemo(() => {
+    const compare = (a: (typeof playerStandings)[number], b: (typeof playerStandings)[number]) => {
+      if (b.wins !== a.wins) return b.wins - a.wins
+      if (b.pointDiff !== a.pointDiff) return b.pointDiff - a.pointDiff
+      return b.pointsFor - a.pointsFor
+    }
+
+    return state.divisions.map((d) => {
+      const women = state.players
+        .filter((p) => p.divisionId === d.id && p.gender === 'F')
+        .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id)! }))
+        .sort((x, y) => compare(x.s, y.s))
+        .slice(0, 3)
+
+      const men = state.players
+        .filter((p) => p.divisionId === d.id && p.gender === 'M')
+        .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id)! }))
+        .sort((x, y) => compare(x.s, y.s))
+        .slice(0, 3)
+
+      return { division: d, women, men }
+    })
+  }, [playerStandingByPlayerId, playerStandings, state.divisions, state.players])
 
   return (
     <div className="space-y-6 px-6 py-6">
@@ -83,34 +110,76 @@ export function TvPage() {
         </section>
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
-          <h2 className="mb-4 text-lg font-semibold">Top Individuals</h2>
-          <div className="space-y-2">
-            {playerStandings.slice(0, 10).map((row, idx) => {
-              const p = playerById.get(row.playerId)
-              return (
-                <div
-                  key={row.playerId}
-                  className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/30 px-4 py-3"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-8 text-center text-lg font-bold text-slate-300">{idx + 1}</div>
-                    <div className="min-w-0">
-                      <div className="truncate text-lg font-semibold">{p ? displayPlayerName(p) : row.playerId}</div>
-                      <div className="text-sm text-slate-400">{clubNameById.get(row.clubId) ?? row.clubId}</div>
+          <h2 className="mb-4 text-lg font-semibold">Top Individuals (by division)</h2>
+          <div className="grid gap-4">
+            {topByDivision.map(({ division, women, men }) => (
+              <div key={division.id} className="rounded-xl border border-slate-800 bg-slate-950/20 p-4">
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <div className="text-base font-semibold text-slate-100">{division.name}</div>
+                  <div className="text-sm text-slate-500">{division.code}</div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="mb-2 text-sm font-semibold text-slate-200">Women</div>
+                    <div className="space-y-2">
+                      {women.map(({ p, s }, idx) => (
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/30 px-4 py-3"
+                        >
+                          <div className="flex items-center gap-4 min-w-0">
+                            <div className="w-8 text-center text-lg font-bold text-slate-300">{idx + 1}</div>
+                            <div className="min-w-0">
+                              <div className="truncate text-lg font-semibold">{displayPlayerName(p)}</div>
+                              <div className="truncate text-sm text-slate-400">{clubNameById.get(p.clubId) ?? p.clubId}</div>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-2xl font-bold">
+                              {s.wins}
+                              <span className="text-slate-500">-{s.losses}</span>
+                            </div>
+                            <div className="text-sm font-semibold text-slate-200">
+                              {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">
-                      {row.wins}
-                      <span className="text-slate-500">-{row.losses}</span>
-                    </div>
-                    <div className="text-sm font-semibold text-slate-200">
-                      {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
+
+                  <div>
+                    <div className="mb-2 text-sm font-semibold text-slate-200">Men</div>
+                    <div className="space-y-2">
+                      {men.map(({ p, s }, idx) => (
+                        <div
+                          key={p.id}
+                          className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/30 px-4 py-3"
+                        >
+                          <div className="flex items-center gap-4 min-w-0">
+                            <div className="w-8 text-center text-lg font-bold text-slate-300">{idx + 1}</div>
+                            <div className="min-w-0">
+                              <div className="truncate text-lg font-semibold">{displayPlayerName(p)}</div>
+                              <div className="truncate text-sm text-slate-400">{clubNameById.get(p.clubId) ?? p.clubId}</div>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-2xl font-bold">
+                              {s.wins}
+                              <span className="text-slate-500">-{s.losses}</span>
+                            </div>
+                            <div className="text-sm font-semibold text-slate-200">
+                              {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
         </section>
       </div>
