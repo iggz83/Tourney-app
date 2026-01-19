@@ -4,9 +4,14 @@ import { ScoreEntryPage } from './pages/ScoreEntryPage'
 import { StandingsPage } from './pages/StandingsPage'
 import { TvPage } from './pages/TvPage'
 
+function withSearch(pathname: string, search: string) {
+  return search && search.startsWith('?') ? `${pathname}${search}` : pathname
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const isTv = location.pathname.startsWith('/tv')
+  const search = location.search || ''
 
   if (isTv) {
     return <div className="min-h-dvh bg-slate-950 text-slate-100">{children}</div>
@@ -23,10 +28,10 @@ function Shell({ children }: { children: React.ReactNode }) {
             <div className="truncate text-xs text-slate-400">4 Clubs • 3 Rounds • Multi-division standings</div>
           </div>
           <nav className="flex shrink-0 items-center gap-1 text-sm">
-            <TopNav to="/setup">Setup</TopNav>
-            <TopNav to="/scores">Scores</TopNav>
-            <TopNav to="/standings">Standings</TopNav>
-            <TopNav to="/tv">TV</TopNav>
+            <TopNav to={withSearch('/setup', search)}>Setup</TopNav>
+            <TopNav to={withSearch('/scores', search)}>Scores</TopNav>
+            <TopNav to={withSearch('/standings', search)}>Standings</TopNav>
+            <TopNav to={withSearch('/tv', search)}>TV</TopNav>
           </nav>
         </div>
       </header>
@@ -52,10 +57,11 @@ function TopNav({ to, children }: { to: string; children: React.ReactNode }) {
 }
 
 export default function App() {
+  const location = useLocation()
   return (
     <Shell>
       <Routes>
-        <Route path="/" element={<Navigate to="/standings" replace />} />
+        <Route path="/" element={<Navigate to={withSearch('/standings', location.search || '')} replace />} />
         <Route path="/setup" element={<SetupPage />} />
         <Route path="/scores" element={<ScoreEntryPage />} />
         <Route path="/standings" element={<StandingsPage />} />

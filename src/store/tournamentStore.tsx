@@ -7,6 +7,7 @@ import {
   connectCloudSync,
   ensureTournamentRow,
   ensureTournamentIdInUrl,
+  fetchTournamentState,
   getTournamentIdFromUrl,
   shouldEnableCloudSync,
   type CloudSyncStatus,
@@ -282,6 +283,25 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           },
         })
         connRef.current = conn
+
+        // Load existing tournament state (if any). If none exists yet, initialize the row with our current local state.
+        try {
+          const remote = await fetchTournamentState(tid)
+          if (cancelled) return
+          if (remote && remote.updatedAt && stateUpdatedAtRef.current && remote.updatedAt > stateUpdatedAtRef.current) {
+            isApplyingRemote.current = true
+            dispatch({ type: 'import', state: remote })
+            setTimeout(() => {
+              isApplyingRemote.current = false
+            }, 0)
+          } else if (!remote) {
+            // Initialize cloud state so other devices opening the link see this tournament immediately.
+            // eslint-disable-next-line no-void
+            void conn.pushState(state)
+          }
+        } catch {
+          // ignore fetch/init issues; realtime may still work
+        }
       } catch {
         setSyncStatus('error')
       }

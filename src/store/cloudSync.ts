@@ -69,6 +69,13 @@ export async function ensureTournamentRow(tid: string) {
   if (insErr) throw insErr
 }
 
+export async function fetchTournamentState(tid: string): Promise<TournamentStateV2 | null> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { data, error } = await supabase.from('tournaments').select('state').eq('id', tid).maybeSingle()
+  if (error) throw error
+  return normalizeTournamentState(data?.state ?? null)
+}
+
 export function connectCloudSync(args: {
   tid: string
   onStatus: (s: CloudSyncStatus) => void
