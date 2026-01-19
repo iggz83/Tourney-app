@@ -65,11 +65,11 @@ export function TvPage() {
             <div className="text-sm text-slate-500">W-L • Diff</div>
           </div>
 
-          <div className="max-w-[1050px] space-y-2">
+          <div className="max-w-[980px] space-y-2">
             {clubStandings.map((row, idx) => (
               <div
                 key={row.clubId}
-                className="grid grid-cols-[40px_minmax(0,1fr)_110px_90px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
+                className="grid grid-cols-[40px_minmax(0,520px)_100px_80px] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-3"
               >
                 <div className="text-center text-xl font-bold text-slate-200">{idx + 1}</div>
                 <div className="min-w-0">
