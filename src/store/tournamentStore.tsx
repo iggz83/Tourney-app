@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { generateSchedule, generateScheduleAddMissing, matchKeyFromMatch, makeMatchId } from '../domain/scheduler'
+import { generateSchedule } from '../domain/scheduler'
 import { SEEDED_EVENTS } from '../domain/constants'
 import { seedKey } from '../domain/keys'
 import type { ClubId, EventType, MatchId, PlayerId, TournamentState, TournamentStateV1, TournamentStateV2 } from '../domain/types'
@@ -194,33 +194,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return touch({ ...state, divisionConfigs })
     }
     case 'schedule.generate': {
-      // Add-only: keep existing schedule/scores and only append missing games.
-      const combined = generateScheduleAddMissing({ state, existingMatches: state.matches })
-
-      // Dedupe by match key and normalize ids; preserve any existing score/court/completedAt.
-      const bestByKey = new Map<string, TournamentStateV2['matches'][number]>()
-      for (const m of combined) {
-        const k = matchKeyFromMatch(m)
-        const prev = bestByKey.get(k)
-        if (!prev) {
-          bestByKey.set(k, m)
-          continue
-        }
-        const prevHasScore = !!prev.score
-        const curHasScore = !!m.score
-        if (!prevHasScore && curHasScore) bestByKey.set(k, m)
-        else if (prevHasScore === curHasScore) {
-          // Prefer one with court assigned.
-          if ((prev.court ?? 0) === 0 && (m.court ?? 0) > 0) bestByKey.set(k, m)
-        }
-      }
-
-      const merged = [...bestByKey.values()].map((m) => ({
-        ...m,
-        id: makeMatchId({ divisionId: m.divisionId, clubA: m.clubA, clubB: m.clubB, eventType: m.eventType, seed: m.seed }),
-      }))
-
-      return touch({ ...state, matches: merged })
+      // Simple: replace schedule and drop all scores.
+      const nextMatches = generateSchedule(state)
+      return touch({ ...state, matches: nextMatches })
     }
     case 'schedule.regenerate': {
       // Hard reset: replace schedule and drop all scores.

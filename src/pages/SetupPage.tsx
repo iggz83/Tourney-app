@@ -133,7 +133,16 @@ export function SetupPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
-            onClick={() => actions.generateSchedule()}
+            onClick={() => {
+              if (
+                state.matches.length > 0 &&
+                !confirm(
+                  'Regenerate schedule?\n\nThis will DELETE the current schedule and CLEAR ALL SCORES.\nUse this if you want to start over.\n\nContinue?',
+                )
+              )
+                return
+              actions.regenerateSchedule()
+            }}
           >
             Generate schedule
           </button>
