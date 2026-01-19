@@ -16,7 +16,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold tracking-wide text-slate-200">
               Inter-Club Pickleball Tournament Tracker
@@ -31,7 +31,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className={isTv ? 'mx-auto max-w-none px-0 py-0' : 'mx-auto max-w-6xl px-4 py-6'}>{children}</main>
+      <main className={isTv ? 'mx-auto max-w-none px-0 py-0' : 'mx-auto max-w-7xl px-4 py-6'}>{children}</main>
     </div>
   )
 }

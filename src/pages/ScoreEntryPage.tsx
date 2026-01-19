@@ -11,6 +11,14 @@ function fullName(p?: { firstName: string; lastName: string }) {
   return s.length ? s : '—'
 }
 
+function displayPlayerName(p?: { firstName: string; lastName: string; clubId?: string }) {
+  if (!p) return '—'
+  if (p.clubId && p.firstName.trim() === p.clubId) {
+    return p.lastName.trim().length ? p.lastName.trim() : '—'
+  }
+  return fullName(p)
+}
+
 function eventLabel(match: Match) {
   return SEEDED_EVENTS.find((e) => e.eventType === match.eventType && e.seed === match.seed)?.label ?? `${match.eventType} #${match.seed}`
 }
@@ -111,8 +119,8 @@ export function ScoreEntryPage() {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-slate-800">
-        <div className="min-w-[1050px]">
-          <div className="grid grid-cols-[110px_44px_54px_140px_120px_140px_1fr_260px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+        <div className="min-w-[1200px]">
+          <div className="grid grid-cols-[120px_44px_54px_120px_110px_120px_1fr_230px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div className="whitespace-nowrap">ID</div>
             <div>R</div>
             <div>Ct</div>
@@ -129,8 +137,8 @@ export function ScoreEntryPage() {
             const divisionConfig = getDivisionConfig(state as TournamentStateV2, m.divisionId)
             const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
             const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
-            const aNames = aPair ? aPair.map((id) => fullName(playersById.get(id))).join(' / ') : '—'
-            const bNames = bPair ? bPair.map((id) => fullName(playersById.get(id))).join(' / ') : '—'
+            const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+            const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
 
             const aWon = computed.winnerClubId === m.clubA
             const bWon = computed.winnerClubId === m.clubB
@@ -145,7 +153,7 @@ export function ScoreEntryPage() {
             const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
 
             return (
-              <div key={m.id} className="grid grid-cols-[110px_44px_54px_140px_120px_140px_1fr_260px] items-center gap-2 px-3 py-2 text-sm">
+              <div key={m.id} className="grid grid-cols-[120px_44px_54px_120px_110px_120px_1fr_230px] items-center gap-2 px-3 py-2 text-sm">
                 <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
                 <div className="text-slate-300">{m.round}</div>
                 <div className="text-slate-300">{m.court}</div>
