@@ -570,6 +570,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     lastSentAt.current = state.updatedAt
     const tid = tidRef.current
     if (!tid) return
+    // CRITICAL: Don't push anything until we've hydrated at least once for this tid.
+    // Otherwise a fresh browser (incognito/new device) can "win" with an empty schedule and wipe remote matches.
+    if (hydratedTidRef.current !== tid) return
 
     // Core config updates
     const coreSig = coreSignature(state)
