@@ -357,6 +357,16 @@ function loadState(): TournamentStateV2 {
 type Store = {
   state: TournamentStateV2
   dispatch: React.Dispatch<Action>
+  cloud: {
+    enabled: boolean
+    tid: string | null
+    hydrated: boolean
+    status: CloudSyncStatus
+    inFlight: number
+    lastSyncedAt: string | null
+    lastSyncedUpdatedAt: string | null
+    error: string | null
+  }
   actions: {
     reset(): void
     importState(state: TournamentStateV2): void
@@ -387,7 +397,11 @@ const Ctx = createContext<Store | null>(null)
 export function TournamentStoreProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const [state, dispatch] = useReducer(reducer, undefined, loadState)
-  const [, setSyncStatus] = useState<CloudSyncStatus>('disabled')
+  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('disabled')
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [inFlight, setInFlight] = useState(0)
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
+  const [lastSyncedUpdatedAt, setLastSyncedUpdatedAt] = useState<string | null>(null)
   const isApplyingRemote = useRef(false)
   const lastSentAt = useRef<string | null>(null)
   const connRef = useRef<ReturnType<typeof connectCloudSync> | null>(null)
@@ -400,6 +414,22 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   const prevCoreSigRef = useRef<string | null>(null)
   const prevScheduleSigRef = useRef<string | null>(null)
   const prevScoresRef = useRef<Map<string, string>>(new Map())
+
+  function trackCloudWrite(updatedAt: string, p: Promise<unknown>) {
+    setInFlight((n) => n + 1)
+    void p
+      .then(() => {
+        setSyncError(null)
+        setLastSyncedAt(new Date().toISOString())
+        setLastSyncedUpdatedAt(updatedAt)
+      })
+      .catch((e) => {
+        setSyncError(e instanceof Error ? e.message : 'Cloud sync failed')
+      })
+      .finally(() => {
+        setInFlight((n) => Math.max(0, n - 1))
+      })
+  }
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(state))
@@ -423,6 +453,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       connRef.current?.close()
       connRef.current = null
       tidRef.current = null
+      setSyncStatus('disabled')
+      setSyncError(null)
+      setInFlight(0)
       return
     }
 
@@ -437,6 +470,10 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       prevScheduleSigRef.current = null
       prevScoresRef.current = new Map()
       hydratedTidRef.current = null
+      setSyncError(null)
+      setInFlight(0)
+      setLastSyncedAt(null)
+      setLastSyncedUpdatedAt(null)
     }
     tidRef.current = tid
 
@@ -464,6 +501,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             const merged: TournamentStateV2 = { ...remote, matches: safeMatches }
             dispatch({ type: 'import', state: merged, source: 'remote' })
             hydratedTidRef.current = tid
+            // Remote is now authoritative for this tid; treat local as "in sync" at this point.
+            setLastSyncedAt(new Date().toISOString())
+            setLastSyncedUpdatedAt(merged.updatedAt ?? null)
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -473,6 +513,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             isApplyingRemote.current = true
             dispatch({ type: 'matches.upsert', match: m, source: 'remote' })
             hydratedTidRef.current = tid
+            setLastSyncedAt(new Date().toISOString())
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -481,6 +522,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             isApplyingRemote.current = true
             dispatch({ type: 'match.delete', matchId, source: 'remote' })
             hydratedTidRef.current = tid
+            setLastSyncedAt(new Date().toISOString())
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -506,19 +548,21 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           isApplyingRemote.current = true
           dispatch({ type: 'import', state: { ...chosenCore, matches: chosenMatches }, source: 'remote' })
           hydratedTidRef.current = tid
+          setLastSyncedAt(new Date().toISOString())
+          setLastSyncedUpdatedAt(chosenCore.updatedAt ?? null)
           setTimeout(() => {
             isApplyingRemote.current = false
           }, 0)
 
           // Ensure cloud has core; if remote core is missing, push local core.
           if (!remoteCore) {
-            void upsertTournamentCoreState(tid, { ...local, matches: [] })
+            trackCloudWrite(local.updatedAt, upsertTournamentCoreState(tid, { ...local, matches: [] }))
           }
 
           // Ensure cloud has schedule rows; ONLY do this for a brand-new tournament row.
           // (Otherwise, switching tids could accidentally push the previous tournament's schedule.)
           if (!remoteCore && remoteMatches.length === 0 && local.matches.length > 0) {
-            void upsertTournamentMatches(tid, local.matches)
+            trackCloudWrite(local.updatedAt, upsertTournamentMatches(tid, local.matches))
           }
         } catch {
           // ignore fetch/init issues; realtime may still work
@@ -579,28 +623,35 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     if (prevCoreSigRef.current !== coreSig) {
       prevCoreSigRef.current = coreSig
       // keep cloud core small; matches are in tournament_matches
-      void upsertTournamentCoreState(tid, { ...state, matches: [] })
+      trackCloudWrite(state.updatedAt, upsertTournamentCoreState(tid, { ...state, matches: [] }))
     }
 
     // Schedule updates (upsert all matches when schedule structure changes)
     const schedSig = scheduleSignature(state.matches)
     if (prevScheduleSigRef.current !== schedSig) {
       prevScheduleSigRef.current = schedSig
-      void upsertTournamentMatches(tid, state.matches)
+      trackCloudWrite(state.updatedAt, upsertTournamentMatches(tid, state.matches))
     }
 
     // Score updates (per match row)
     const prevScores = prevScoresRef.current
     const nextScores = new Map<string, string>()
+    const scoreWrites: Promise<void>[] = []
     for (const m of state.matches) {
       const sig = scoreSignature(m)
       nextScores.set(m.id, sig)
       const prev = prevScores.get(m.id) ?? ''
       if (prev !== sig) {
-        void setTournamentMatchScore({ tid, matchId: m.id, score: m.score })
+        scoreWrites.push(setTournamentMatchScore({ tid, matchId: m.id, score: m.score }))
       }
     }
     prevScoresRef.current = nextScores
+    if (scoreWrites.length) {
+      trackCloudWrite(
+        state.updatedAt,
+        Promise.all(scoreWrites).then(() => {}),
+      )
+    }
   }, [state])
 
   const actions = useMemo<Store['actions']>(() => {
@@ -625,7 +676,27 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     }
   }, [state])
 
-  const store = useMemo<Store>(() => ({ state, dispatch, actions }), [state, actions])
+  const cloudEnabled = shouldEnableCloudSync()
+  const tid = tidRef.current
+  const hydrated = !!tid && hydratedTidRef.current === tid
+  const store = useMemo<Store>(
+    () => ({
+      state,
+      dispatch,
+      cloud: {
+        enabled: cloudEnabled,
+        tid,
+        hydrated,
+        status: cloudEnabled ? syncStatus : 'disabled',
+        inFlight,
+        lastSyncedAt,
+        lastSyncedUpdatedAt,
+        error: syncError,
+      },
+      actions,
+    }),
+    [actions, cloudEnabled, dispatch, hydrated, inFlight, lastSyncedAt, lastSyncedUpdatedAt, state, syncError, syncStatus, tid],
+  )
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>
 }
 

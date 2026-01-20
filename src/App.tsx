@@ -3,6 +3,7 @@ import { SetupPage } from './pages/SetupPage'
 import { ScoreEntryPage } from './pages/ScoreEntryPage'
 import { StandingsPage } from './pages/StandingsPage'
 import { TvPage } from './pages/TvPage'
+import { CloudSyncIndicator } from './components/CloudSyncIndicator'
 
 function withSearch(pathname: string, search: string) {
   return search && search.startsWith('?') ? `${pathname}${search}` : pathname
@@ -23,12 +24,15 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="truncate text-xs text-slate-400">4 Clubs • 3 Rounds • Multi-division standings</div>
           </div>
-          <nav className="flex shrink-0 items-center gap-1 text-sm">
-            <TopNav to={withSearch('/setup', search)}>Setup</TopNav>
-            <TopNav to={withSearch('/scores', search)}>Scores</TopNav>
-            <TopNav to={withSearch('/standings', search)}>Standings</TopNav>
-            <TopNav to={withSearch('/tv', search)}>TV</TopNav>
-          </nav>
+          <div className="flex shrink-0 items-center gap-3">
+            <CloudSyncIndicator />
+            <nav className="flex items-center gap-1 text-sm">
+              <TopNav to={withSearch('/setup', search)}>Setup</TopNav>
+              <TopNav to={withSearch('/scores', search)}>Scores</TopNav>
+              <TopNav to={withSearch('/standings', search)}>Standings</TopNav>
+              <TopNav to={withSearch('/tv', search)}>TV</TopNav>
+            </nav>
+          </div>
         </div>
       </header>
       <main className={isTv ? 'mx-auto max-w-none px-0 py-0' : 'mx-auto max-w-7xl px-4 py-6'}>{children}</main>
