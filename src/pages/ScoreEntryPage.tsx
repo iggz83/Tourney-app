@@ -71,6 +71,7 @@ export function ScoreEntryPage() {
   const [divisionId, setDivisionId] = useState<string>('all')
   const [round, setRound] = useState<'all' | string>('all')
   const [eventFilter, setEventFilter] = useState<string>('all')
+  const [fullLineupsOnly, setFullLineupsOnly] = useState<boolean>(false)
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
   const totalMatches = state.matches.length
@@ -86,8 +87,16 @@ export function ScoreEntryPage() {
       if (!isEventType(eventType) || !Number.isFinite(seed)) return []
       ms = ms.filter((m) => m.eventType === eventType && m.seed === seed)
     }
+    if (fullLineupsOnly) {
+      ms = ms.filter((m) => {
+        const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
+        const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
+        const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+        return Boolean(aPair && bPair)
+      })
+    }
     return [...ms].sort(byMatchOrder)
-  }, [state.matches, divisionId, eventFilter])
+  }, [state.matches, state.divisionConfigs, divisionId, eventFilter, fullLineupsOnly])
 
   const availableRounds = useMemo(() => {
     const s = new Set<number>()
@@ -395,6 +404,15 @@ export function ScoreEntryPage() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-1 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-slate-200"
+              checked={fullLineupsOnly}
+              onChange={(e) => setFullLineupsOnly(e.target.checked)}
+            />
+            <span className="text-sm">Full lineups</span>
           </label>
           <button
             className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
