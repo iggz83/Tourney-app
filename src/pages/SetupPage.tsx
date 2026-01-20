@@ -478,6 +478,12 @@ export function SetupPage() {
           </div>
         </div>
 
+        {state.clubs.length === 0 ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4 text-sm text-slate-300">
+            No clubs yet. Add a club above to create roster slots.
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-2">
           {state.clubs.map((club) => {
             const enabled = clubEnabledForDivision(club.id)
@@ -567,6 +573,7 @@ export function SetupPage() {
                 className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
                 value={clubId}
                 onChange={(e) => setClubId(e.target.value as ClubId)}
+                disabled={state.clubs.length === 0}
               >
                 {state.clubs.filter((c) => clubEnabledForDivision(c.id)).map((c) => (
                   <option key={c.id} value={c.id}>
@@ -579,6 +586,7 @@ export function SetupPage() {
               className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
               onClick={() => actions.autoSeed(divisionId, clubId)}
               title="Auto-fill mapping for the selected club in this division"
+              disabled={!state.clubs.length || !clubId}
             >
               Auto-seed club
             </button>
@@ -586,11 +594,18 @@ export function SetupPage() {
               className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
               onClick={() => actions.autoSeed(divisionId)}
               title="Auto-fill mapping for all clubs in this division"
+              disabled={!state.clubs.length}
             >
               Auto-seed all clubs
             </button>
           </div>
         </div>
+
+        {state.clubs.length === 0 ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4 text-sm text-slate-300">
+            Add at least one club to set up seeded team mappings.
+          </div>
+        ) : null}
 
         <div className="overflow-hidden rounded-xl border border-slate-800">
           <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
