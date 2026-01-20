@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { generateSchedule } from '../domain/scheduler'
@@ -117,10 +118,11 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const clubs = state.clubs.filter((c) => c.id !== clubId)
       const players = state.players.filter((p) => p.clubId !== clubId)
       const divisionConfigs = state.divisionConfigs.map((dc) => {
-        const { [clubId]: _, ...restSeeds } = dc.seedsByClub as Record<string, any>
-        const enabled = { ...(dc.clubEnabled ?? {}) }
+        const seedsByClub = { ...dc.seedsByClub }
+        delete (seedsByClub as Record<string, unknown>)[clubId]
+        const enabled: Record<string, boolean> = { ...(dc.clubEnabled ?? {}) }
         delete enabled[clubId]
-        return { ...dc, seedsByClub: restSeeds, clubEnabled: enabled }
+        return { ...dc, seedsByClub, clubEnabled: enabled }
       })
       const matches = state.matches.filter((m) => m.clubA !== clubId && m.clubB !== clubId)
       return touch({ ...state, clubs, players, divisionConfigs, matches })
@@ -136,6 +138,15 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return touch({ ...state, players })
     }
     case 'division.autoseed': {
+      const playerById = new Map(state.players.map((p) => [p.id, p] as const))
+      const seededOrNull = (pid: PlayerId): PlayerId | null => {
+        const p = playerById.get(pid)
+        if (!p) return null
+        // If both names blank, keep it unassigned (null) rather than seeding an "(unnamed)" placeholder.
+        const hasName = Boolean(p.firstName.trim().length || p.lastName.trim().length)
+        return hasName ? pid : null
+      }
+
       const divisionConfigs = state.divisionConfigs.map((dc) => {
         if (dc.divisionId !== action.divisionId) return dc
 
@@ -149,18 +160,18 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
           const mid = (n: 1 | 2 | 3 | 4) => `${action.divisionId}:${clubId}:M${n}` as PlayerId
 
           // Women
-          clubRecord[seedKey('WOMENS_DOUBLES', 1)] = { playerIds: [wid(1), wid(2)] }
-          clubRecord[seedKey('WOMENS_DOUBLES', 2)] = { playerIds: [wid(3), wid(4)] }
+          clubRecord[seedKey('WOMENS_DOUBLES', 1)] = { playerIds: [seededOrNull(wid(1)), seededOrNull(wid(2))] }
+          clubRecord[seedKey('WOMENS_DOUBLES', 2)] = { playerIds: [seededOrNull(wid(3)), seededOrNull(wid(4))] }
 
           // Men
-          clubRecord[seedKey('MENS_DOUBLES', 1)] = { playerIds: [mid(1), mid(2)] }
-          clubRecord[seedKey('MENS_DOUBLES', 2)] = { playerIds: [mid(3), mid(4)] }
+          clubRecord[seedKey('MENS_DOUBLES', 1)] = { playerIds: [seededOrNull(mid(1)), seededOrNull(mid(2))] }
+          clubRecord[seedKey('MENS_DOUBLES', 2)] = { playerIds: [seededOrNull(mid(3)), seededOrNull(mid(4))] }
 
           // Mixed (UI expects [Woman, Man])
-          clubRecord[seedKey('MIXED_DOUBLES', 1)] = { playerIds: [wid(1), mid(1)] }
-          clubRecord[seedKey('MIXED_DOUBLES', 2)] = { playerIds: [wid(2), mid(2)] }
-          clubRecord[seedKey('MIXED_DOUBLES', 3)] = { playerIds: [wid(3), mid(3)] }
-          clubRecord[seedKey('MIXED_DOUBLES', 4)] = { playerIds: [wid(4), mid(4)] }
+          clubRecord[seedKey('MIXED_DOUBLES', 1)] = { playerIds: [seededOrNull(wid(1)), seededOrNull(mid(1))] }
+          clubRecord[seedKey('MIXED_DOUBLES', 2)] = { playerIds: [seededOrNull(wid(2)), seededOrNull(mid(2))] }
+          clubRecord[seedKey('MIXED_DOUBLES', 3)] = { playerIds: [seededOrNull(wid(3)), seededOrNull(mid(3))] }
+          clubRecord[seedKey('MIXED_DOUBLES', 4)] = { playerIds: [seededOrNull(wid(4)), seededOrNull(mid(4))] }
 
           nextSeedsByClub[clubId] = clubRecord
         }
