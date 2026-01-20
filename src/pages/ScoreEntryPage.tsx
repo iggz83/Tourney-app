@@ -73,6 +73,7 @@ export function ScoreEntryPage() {
   const [eventFilter, setEventFilter] = useState<string>('all')
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
+  const totalMatches = state.matches.length
 
   const playersById = useMemo(() => getPlayersById(state), [state])
 
@@ -342,6 +343,9 @@ export function ScoreEntryPage() {
         <div>
           <h1 className="text-xl font-semibold">Score Entry</h1>
           <p className="text-sm text-slate-300">Enter scores (to 11). Standings update instantly.</p>
+          <div className="mt-1 text-xs text-slate-400">
+            Total matches: <span className="tabular-nums font-semibold text-slate-200">{totalMatches}</span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm text-slate-300">
