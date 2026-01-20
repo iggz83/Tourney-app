@@ -64,7 +64,8 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       if (!clubId.length) return state
       if (state.clubs.some((c) => c.id === clubId)) return state
 
-      const clubs = [...state.clubs, { id: clubId, code: clubId, name: action.name || clubId }]
+      // Don't prepopulate club full name; default to blank unless user provided one.
+      const clubs = [...state.clubs, { id: clubId, code: clubId, name: action.name }]
 
       // Add default roster slots (4W/4M) per division for this new club.
       const players = [...state.players]
@@ -75,8 +76,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
             clubId,
             divisionId: division.id,
             gender: 'F',
-            firstName: clubId,
-            lastName: `${division.code} Woman ${i}`,
+            // Don't prepopulate roster player names.
+            firstName: '',
+            lastName: '',
           })
         }
         for (let i = 1; i <= 4; i++) {
@@ -85,8 +87,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
             clubId,
             divisionId: division.id,
             gender: 'M',
-            firstName: clubId,
-            lastName: `${division.code} Man ${i}`,
+            // Don't prepopulate roster player names.
+            firstName: '',
+            lastName: '',
           })
         }
       }

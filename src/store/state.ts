@@ -13,8 +13,9 @@ function createDefaultPlayers(): Player[] {
           clubId: club.id,
           divisionId: division.id,
           gender: 'F',
-          firstName: club.id,
-          lastName: `${division.code} Woman ${i}`,
+          // Don't prepopulate names.
+          firstName: '',
+          lastName: '',
         })
       }
       for (let i = 1; i <= 4; i++) {
@@ -23,8 +24,9 @@ function createDefaultPlayers(): Player[] {
           clubId: club.id,
           divisionId: division.id,
           gender: 'M',
-          firstName: club.id,
-          lastName: `${division.code} Man ${i}`,
+          // Don't prepopulate names.
+          firstName: '',
+          lastName: '',
         })
       }
     }

@@ -348,7 +348,8 @@ export function SetupPage() {
                    alert(`Club ${code} already exists.`)
                    return
                  }
-                 actions.addClub(code, newClubName.trim() || code)
+                 // Don't prepopulate club full name; if left blank, keep it blank.
+                 actions.addClub(code, newClubName.trim())
                  setNewClubCode('')
                  setNewClubName('')
                  setClubId(code)

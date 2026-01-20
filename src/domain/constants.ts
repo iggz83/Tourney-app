@@ -1,10 +1,11 @@
 import type { Club, Division, EventType, SeededEvent, SkillDivisionCode } from './types'
 
 export const CLUBS: Club[] = [
-  { id: 'NPC', name: 'NPC', code: 'NPC' },
-  { id: 'IPG', name: 'IPG', code: 'IPG' },
-  { id: 'PR', name: 'PR', code: 'PR' },
-  { id: 'PUP', name: 'PUP', code: 'PUP' },
+  // Default full names start blank (user fills in "Club Directory" as needed).
+  { id: 'NPC', name: '', code: 'NPC' },
+  { id: 'IPG', name: '', code: 'IPG' },
+  { id: 'PR', name: '', code: 'PR' },
+  { id: 'PUP', name: '', code: 'PUP' },
 ]
 
 export const SKILL_DIVISIONS: Division[] = [
