@@ -391,6 +391,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   const stateUpdatedAtRef = useRef<string>(state.updatedAt)
   const stateRef = useRef<TournamentStateV2>(state)
   const tidRef = useRef<string | null>(null)
+  // Tracks which tid the in-memory state currently corresponds to (for cloud hydration).
+  // This prevents "load tournament" from incorrectly keeping the previous tournament's clubs/matches.
+  const hydratedTidRef = useRef<string | null>(null)
   const prevCoreSigRef = useRef<string | null>(null)
   const prevScheduleSigRef = useRef<string | null>(null)
   const prevScoresRef = useRef<Map<string, string>>(new Map())
@@ -430,6 +433,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       prevCoreSigRef.current = null
       prevScheduleSigRef.current = null
       prevScoresRef.current = new Map()
+      hydratedTidRef.current = null
     }
     tidRef.current = tid
 
@@ -446,12 +450,17 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           tid,
           onStatus: setSyncStatus,
           onRemoteCoreState: (remote) => {
-            // last-write-wins for core config
-            if (remote.updatedAt && stateUpdatedAtRef.current && remote.updatedAt <= stateUpdatedAtRef.current) return
+            // last-write-wins for core config (only once we've hydrated for this tid).
+            // When switching tid, we MUST allow older tournaments to overwrite the current in-memory state.
+            if (hydratedTidRef.current === tid) {
+              if (remote.updatedAt && stateUpdatedAtRef.current && remote.updatedAt <= stateUpdatedAtRef.current) return
+            }
             isApplyingRemote.current = true
-            // Preserve current match scores (they come from match rows)
-            const merged: TournamentStateV2 = { ...remote, matches: stateRef.current.matches }
+            // Preserve current match scores (they come from match rows) but only after we've hydrated for this tid.
+            const safeMatches = hydratedTidRef.current === tid ? stateRef.current.matches : []
+            const merged: TournamentStateV2 = { ...remote, matches: safeMatches }
             dispatch({ type: 'import', state: merged, source: 'remote' })
+            hydratedTidRef.current = tid
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -460,6 +469,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             // Apply match row changes without touching core state (prevents overwriting club/player edits while typing).
             isApplyingRemote.current = true
             dispatch({ type: 'matches.upsert', match: m, source: 'remote' })
+            hydratedTidRef.current = tid
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -467,6 +477,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           onRemoteMatchDelete: (matchId) => {
             isApplyingRemote.current = true
             dispatch({ type: 'match.delete', matchId, source: 'remote' })
+            hydratedTidRef.current = tid
             setTimeout(() => {
               isApplyingRemote.current = false
             }, 0)
@@ -481,16 +492,17 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           if (cancelled) return
           const local = stateRef.current
 
-          // Choose core: newer wins (incognito starts at epoch so remote should win).
-          const useRemoteCore =
-            !!remoteCore && !!remoteCore.updatedAt && !!local.updatedAt && remoteCore.updatedAt > local.updatedAt
-          const chosenCore = (useRemoteCore ? remoteCore : local) ?? local
-
-          // Choose matches: if remote has any matches, prefer them (scores are authoritative there).
-          const chosenMatches = remoteMatches.length > 0 ? remoteMatches : local.matches
+          // IMPORTANT: When a tournament exists in Supabase (remoteCore != null),
+          // always treat it as authoritative for this tid, even if its updatedAt is older than
+          // whatever state happens to be in-memory from a different tid.
+          //
+          // Local state is only used to initialize a brand-new tournament (remoteCore == null).
+          const chosenCore = remoteCore ?? local
+          const chosenMatches = remoteCore ? remoteMatches : remoteMatches.length > 0 ? remoteMatches : local.matches
 
           isApplyingRemote.current = true
           dispatch({ type: 'import', state: { ...chosenCore, matches: chosenMatches }, source: 'remote' })
+          hydratedTidRef.current = tid
           setTimeout(() => {
             isApplyingRemote.current = false
           }, 0)
@@ -500,8 +512,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             void upsertTournamentCoreState(tid, { ...local, matches: [] })
           }
 
-          // Ensure cloud has schedule rows; if remote matches are missing but local has them, push.
-          if (remoteMatches.length === 0 && local.matches.length > 0) {
+          // Ensure cloud has schedule rows; ONLY do this for a brand-new tournament row.
+          // (Otherwise, switching tids could accidentally push the previous tournament's schedule.)
+          if (!remoteCore && remoteMatches.length === 0 && local.matches.length > 0) {
             void upsertTournamentMatches(tid, local.matches)
           }
         } catch {
