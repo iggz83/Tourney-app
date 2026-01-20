@@ -79,6 +79,13 @@ export function ScoreEntryPage() {
   const playersById = useMemo(() => getPlayersById(state), [state])
 
   const baseFiltered = useMemo(() => {
+    const isNamedPlayer = (playerId: string | undefined) => {
+      if (!playerId) return false
+      const p = playersById.get(playerId)
+      if (!p) return false
+      return Boolean(p.firstName.trim().length || p.lastName.trim().length)
+    }
+
     let ms = state.matches
     if (divisionId !== 'all') ms = ms.filter((m) => m.divisionId === divisionId)
     if (eventFilter !== 'all') {
@@ -92,11 +99,12 @@ export function ScoreEntryPage() {
         const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
         const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
         const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
-        return Boolean(aPair && bPair)
+        if (!aPair || !bPair) return false
+        return isNamedPlayer(aPair[0]) && isNamedPlayer(aPair[1]) && isNamedPlayer(bPair[0]) && isNamedPlayer(bPair[1])
       })
     }
     return [...ms].sort(byMatchOrder)
-  }, [state.matches, state.divisionConfigs, divisionId, eventFilter, fullLineupsOnly])
+  }, [state.matches, state.divisionConfigs, divisionId, eventFilter, fullLineupsOnly, playersById])
 
   const availableRounds = useMemo(() => {
     const s = new Set<number>()
