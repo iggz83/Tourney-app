@@ -47,6 +47,7 @@ type Action =
   | { type: 'schedule.regenerate' }
   | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number]; source?: 'local' | 'remote' }
   | { type: 'match.delete'; matchId: MatchId; source?: 'local' | 'remote' }
+  | { type: 'matches.deleteMany'; matchIds: MatchId[]; source?: 'local' | 'remote' }
   | { type: 'matches.scores.clearAll' }
   | { type: 'match.unlock'; matchId: MatchId }
   | { type: 'match.score.set'; matchId: MatchId; score?: { a: number; b: number } }
@@ -260,6 +261,12 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const matches = state.matches.filter((m) => m.id !== action.matchId)
       return action.source === 'remote' ? { ...state, matches } : touch({ ...state, matches })
     }
+    case 'matches.deleteMany': {
+      if (!action.matchIds.length) return state
+      const toDelete = new Set(action.matchIds)
+      const matches = state.matches.filter((m) => !toDelete.has(m.id))
+      return action.source === 'remote' ? { ...state, matches } : touch({ ...state, matches })
+    }
     case 'matches.scores.clearAll': {
       const matches = state.matches.map((m) => ({ ...m, score: undefined, completedAt: undefined }))
       return touch({ ...state, matches })
@@ -342,6 +349,7 @@ type Store = {
     generateSchedule(): void
     regenerateSchedule(): void
     setScore(matchId: MatchId, score?: { a: number; b: number }): void
+    deleteMatches(matchIds: MatchId[]): void
     exportJson(): string
   }
 }
@@ -642,6 +650,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       generateSchedule: () => dispatch({ type: 'schedule.generate' }),
       regenerateSchedule: () => dispatch({ type: 'schedule.regenerate' }),
       setScore: (matchId, score) => dispatch({ type: 'match.score.set', matchId, score }),
+      deleteMatches: (matchIds) => dispatch({ type: 'matches.deleteMany', matchIds }),
       exportJson: () => JSON.stringify(state, null, 2),
     }
   }, [state])

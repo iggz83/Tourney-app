@@ -66,6 +66,14 @@ function escapeHtml(v: string) {
     .replaceAll("'", '&#039;')
 }
 
+function stableServeFirstIsA(matchId: string): boolean {
+  // Deterministic "random": stable across devices/prints as long as matchId is stable.
+  // Simple string hash (djb2-ish) -> pick A/B based on parity.
+  let h = 5381
+  for (let i = 0; i < matchId.length; i++) h = ((h << 5) + h + matchId.charCodeAt(i)) | 0
+  return (h & 1) === 0
+}
+
 export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
@@ -83,14 +91,26 @@ export function ScoreEntryPage() {
 
   const playersById = useMemo(() => getPlayersById(state), [state])
 
-  const baseFiltered = useMemo(() => {
-    const isNamedPlayer = (playerId: string | undefined) => {
+  const isNamedPlayer = useMemo(() => {
+    return (playerId: string | undefined) => {
       if (!playerId) return false
       const p = playersById.get(playerId)
       if (!p) return false
       return Boolean(p.firstName.trim().length || p.lastName.trim().length)
     }
+  }, [playersById])
 
+  const hasFullLineup = useMemo(() => {
+    return (m: Match) => {
+      const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
+      const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
+      const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+      if (!aPair || !bPair) return false
+      return isNamedPlayer(aPair[0]) && isNamedPlayer(aPair[1]) && isNamedPlayer(bPair[0]) && isNamedPlayer(bPair[1])
+    }
+  }, [isNamedPlayer, state.divisionConfigs])
+
+  const baseFiltered = useMemo(() => {
     let ms = state.matches
     if (divisionId !== 'all') ms = ms.filter((m) => m.divisionId === divisionId)
     if (eventFilters.length) {
@@ -121,13 +141,7 @@ export function ScoreEntryPage() {
       ms = ms.filter((m) => !m.score || !m.completedAt)
     }
     if (fullLineupsOnly) {
-      ms = ms.filter((m) => {
-        const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
-        const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
-        const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
-        if (!aPair || !bPair) return false
-        return isNamedPlayer(aPair[0]) && isNamedPlayer(aPair[1]) && isNamedPlayer(bPair[0]) && isNamedPlayer(bPair[1])
-      })
+      ms = ms.filter(hasFullLineup)
     }
     const q = quickSearch.trim().toLowerCase()
     if (q.length) {
@@ -171,6 +185,7 @@ export function ScoreEntryPage() {
     fullLineupsOnly,
     quickSearch,
     playersById,
+    hasFullLineup,
   ])
 
   const availableRounds = useMemo(() => {
@@ -286,18 +301,23 @@ export function ScoreEntryPage() {
 
         const scoreA = m.score?.a ?? null
         const scoreB = m.score?.b ?? null
-        const match = `${clubLabel.get(m.clubA) ?? m.clubA} vs ${clubLabel.get(m.clubB) ?? m.clubB}`
+        const serveA = stableServeFirstIsA(m.id)
+        const matchHtml = `<span class="${serveA ? 'serveFirst' : ''}">${escapeHtml(
+          clubLabel.get(m.clubA) ?? m.clubA,
+        )}</span> <span class="vs">vs</span> <span class="${!serveA ? 'serveFirst' : ''}">${escapeHtml(
+          clubLabel.get(m.clubB) ?? m.clubB,
+        )}</span>`
         const division = divisionNameById.get(m.divisionId) ?? m.divisionId
         const event = eventLabel(m)
         const players = `${aNames} | ${bNames}`
 
         const scoreHtml = `<div class="scoreBoxes">
   <div class="boxRow">
-    <span class="teamTag">${escapeHtml(m.clubA)}</span>
+    <span class="teamTag ${serveA ? 'serveFirst' : ''}">${escapeHtml(m.clubA)}</span>
     <span class="box">${scoreA === null ? '&nbsp;' : escapeHtml(String(scoreA))}</span>
   </div>
   <div class="boxRow">
-    <span class="teamTag">${escapeHtml(m.clubB)}</span>
+    <span class="teamTag ${!serveA ? 'serveFirst' : ''}">${escapeHtml(m.clubB)}</span>
     <span class="box">${scoreB === null ? '&nbsp;' : escapeHtml(String(scoreB))}</span>
   </div>
 </div>`
@@ -309,7 +329,7 @@ export function ScoreEntryPage() {
   <td style="text-align:right;">${escapeHtml(courtCell)}</td>
   <td>${escapeHtml(division)}</td>
   <td>${escapeHtml(event)}</td>
-  <td>${escapeHtml(match)}</td>
+  <td>${matchHtml}</td>
   <td>${escapeHtml(players)}</td>
   <td>${scoreHtml}</td>
 </tr>`
@@ -340,6 +360,8 @@ export function ScoreEntryPage() {
       .scoreBoxes { display: grid; gap: 4px; }
       .boxRow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
       .teamTag { font-weight: 700; font-size: 11px; color: #0f172a; }
+      .vs { color: #64748b; }
+      .serveFirst { font-weight: 900; }
       .box { display: inline-block; width: 40px; height: 28px; border: 2px solid #0f172a; border-radius: 4px; text-align: center; line-height: 26px; font-weight: 700; font-size: 13px; }
       @media print { body { margin: 0.35in; } }
     </style>
@@ -352,7 +374,10 @@ export function ScoreEntryPage() {
       )}</div>
       <div class="small"><b>Printed:</b> ${escapeHtml(new Date().toLocaleString())} &nbsp; <b>Rows:</b> ${sorted.length}</div>
     </div>
-    <div class="hint"><b>Instructions:</b> Write scores in the boxes (team acronyms shown). Optional: circle the winning club in the <b>Match</b> column.</div>
+    <div class="hint">
+      <b>Serve:</b> The <span class="serveFirst">bold team</span> serves first. &nbsp;
+      <b>Instructions:</b> Write scores in the boxes (team acronyms shown). Optional: circle the winning club in the <b>Match</b> column.
+    </div>
     <table>
       <thead>
         <tr>
@@ -489,6 +514,31 @@ export function ScoreEntryPage() {
             }}
           >
             Generate schedule
+          </button>
+          <button
+            className={[
+              'rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40',
+              tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
+            ].join(' ')}
+            disabled={tournamentLocked}
+            onClick={() => {
+              const incomplete = state.matches.filter((m) => !hasFullLineup(m))
+              if (incomplete.length === 0) {
+                alert('No games with missing players found.')
+                return
+              }
+              if (
+                !confirm(
+                  `Delete games with missing players?\n\nThis will permanently delete ${incomplete.length} match(es) where all 4 players are not filled (named).\n\nContinue?`,
+                )
+              )
+                return
+              actions.deleteMatches(incomplete.map((m) => m.id))
+              setDrafts({})
+            }}
+            title="Removes matches with missing players"
+          >
+            Delete games with missing players
           </button>
           <button
             className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
