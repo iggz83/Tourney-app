@@ -54,6 +54,7 @@ export function SetupPage() {
   const [clubId, setClubId] = useState<ClubId>(state.clubs[0]?.id ?? '')
   const [importError, setImportError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [copiedTopPlayers, setCopiedTopPlayers] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerLoading, setPickerLoading] = useState(false)
   const [pickerError, setPickerError] = useState<string | null>(null)
@@ -268,6 +269,35 @@ export function SetupPage() {
               }}
             >
               {copied ? 'Copied!' : 'Copy TV link'}
+            </button>
+            <button
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+              onClick={async () => {
+                ensureTournamentIdInUrl()
+                try {
+                  const u = new URL(window.location.href)
+                  // Always include cloud=1 for the shared Top Players link.
+                  if (u.hash.includes('#/')) {
+                    const parts = u.hash.split('?')
+                    const queryPart = parts.length > 1 ? parts[1] : ''
+                    const sp = new URLSearchParams(queryPart ?? '')
+                    sp.set('cloud', '1')
+                    // force Top Players route
+                    u.hash = `#/top-players?${sp.toString()}`
+                  } else {
+                    u.searchParams.set('cloud', '1')
+                    u.pathname = u.pathname.replace(/\/setup\/?$/, '/top-players')
+                    if (!u.pathname.endsWith('/top-players')) u.pathname = '/top-players'
+                  }
+                  await navigator.clipboard.writeText(u.toString())
+                  setCopiedTopPlayers(true)
+                  setTimeout(() => setCopiedTopPlayers(false), 1000)
+                } catch {
+                  // ignore
+                }
+              }}
+            >
+              {copiedTopPlayers ? 'Copied!' : 'Copy Top Players link'}
             </button>
             <button
               className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"

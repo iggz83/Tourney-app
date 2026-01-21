@@ -3,6 +3,7 @@ import { SetupPage } from './pages/SetupPage'
 import { ScoreEntryPage } from './pages/ScoreEntryPage'
 import { StandingsPage } from './pages/StandingsPage'
 import { TvPage } from './pages/TvPage'
+import { TopPlayersPage } from './pages/TopPlayersPage'
 import { CloudSyncIndicator } from './components/CloudSyncIndicator'
 
 function withSearch(pathname: string, search: string) {
@@ -11,31 +12,40 @@ function withSearch(pathname: string, search: string) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  const isTv = location.pathname.startsWith('/tv')
+  const isBigScreen = location.pathname.startsWith('/tv') || location.pathname.startsWith('/top-players')
   const search = location.search || ''
 
   return (
-    <div className="min-h-dvh bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold tracking-wide text-slate-200">
-              Inter-Club Pickleball Tournament Tracker
+    <div className={isBigScreen ? 'h-dvh overflow-hidden bg-slate-950 text-slate-100' : 'min-h-dvh bg-slate-950 text-slate-100'}>
+      {isBigScreen ? null : (
+        <header className="border-b border-slate-800">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold tracking-wide text-slate-200">
+                Inter-Club Pickleball Tournament Tracker
+              </div>
+              <div className="truncate text-xs text-slate-400">4 Clubs • 3 Rounds • Multi-division standings</div>
             </div>
-            <div className="truncate text-xs text-slate-400">4 Clubs • 3 Rounds • Multi-division standings</div>
+            <div className="flex shrink-0 items-center gap-3">
+              <CloudSyncIndicator />
+              <nav className="flex items-center gap-1 text-sm">
+                <TopNav to={withSearch('/setup', search)}>Setup</TopNav>
+                <TopNav to={withSearch('/scores', search)}>Scores</TopNav>
+                <TopNav to={withSearch('/standings', search)}>Standings</TopNav>
+                <TopNav to={withSearch('/tv', search)}>TV</TopNav>
+                <TopNav to={withSearch('/top-players', search)}>Top players</TopNav>
+              </nav>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <CloudSyncIndicator />
-            <nav className="flex items-center gap-1 text-sm">
-              <TopNav to={withSearch('/setup', search)}>Setup</TopNav>
-              <TopNav to={withSearch('/scores', search)}>Scores</TopNav>
-              <TopNav to={withSearch('/standings', search)}>Standings</TopNav>
-              <TopNav to={withSearch('/tv', search)}>TV</TopNav>
-            </nav>
-          </div>
-        </div>
-      </header>
-      <main className={isTv ? 'mx-auto max-w-none px-0 py-0' : 'mx-auto max-w-7xl px-4 py-6'}>{children}</main>
+        </header>
+      )}
+      <main
+        className={
+          isBigScreen ? 'h-dvh overflow-hidden mx-auto max-w-none px-0 py-0' : 'mx-auto max-w-7xl px-4 py-6'
+        }
+      >
+        {children}
+      </main>
     </div>
   )
 }
@@ -66,6 +76,7 @@ export default function App() {
         <Route path="/scores" element={<ScoreEntryPage />} />
         <Route path="/standings" element={<StandingsPage />} />
         <Route path="/tv" element={<TvPage />} />
+        <Route path="/top-players" element={<TopPlayersPage />} />
       </Routes>
     </Shell>
   )

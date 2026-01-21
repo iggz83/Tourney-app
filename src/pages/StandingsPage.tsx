@@ -18,6 +18,7 @@ function displayPlayerName(p: { firstName: string; lastName: string; clubId: str
 
 export function StandingsPage() {
   const { state } = useTournamentStore()
+  const TOP_N = 5
   const [showAll, setShowAll] = useState(false)
 
   const clubStandings = useMemo(() => computeClubStandings(state), [state])
@@ -52,11 +53,11 @@ export function StandingsPage() {
 
       return {
         division: d,
-        women: showAll ? women : women.slice(0, 3),
-        men: showAll ? men : men.slice(0, 3),
+        women: showAll ? women : women.slice(0, TOP_N),
+        men: showAll ? men : men.slice(0, TOP_N),
       }
     })
-  }, [playerStandingByPlayerId, showAll, state.divisions, state.players])
+  }, [TOP_N, playerStandingByPlayerId, showAll, state.divisions, state.players])
 
   return (
     <div className="space-y-6">
@@ -102,14 +103,14 @@ export function StandingsPage() {
       <section className="space-y-2">
         <div className="flex items-end justify-between gap-3">
           <h2 className="text-base font-semibold">
-            {showAll ? 'All Individual Performers (by division)' : 'Top Individuals (Top 3 Women + Top 3 Men by division)'}
+            {showAll ? 'All Individual Performers (by division)' : `Top Individuals (Top ${TOP_N} Women + Top ${TOP_N} Men by division)`}
           </h2>
           <div className="flex items-center gap-2">
             <button
               className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-900"
               onClick={() => setShowAll((v) => !v)}
             >
-              {showAll ? 'Show top 3 / division' : `Show all (${playerStandings.length})`}
+              {showAll ? `Show top ${TOP_N} / division` : `Show all (${playerStandings.length})`}
             </button>
           </div>
         </div>
@@ -136,7 +137,7 @@ export function StandingsPage() {
                   <div className="min-w-[520px]">
                     <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
                       <div>Top Women</div>
-                      <div className="text-slate-500">{showAll ? 'All' : 'Top 3'}</div>
+                      <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
                     </div>
                     <div className="divide-y divide-slate-800 bg-slate-950/30">
                       {women.map(({ p, s }, idx) => (
@@ -163,7 +164,7 @@ export function StandingsPage() {
                   <div className="min-w-[520px]">
                     <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
                       <div>Top Men</div>
-                      <div className="text-slate-500">{showAll ? 'All' : 'Top 3'}</div>
+                      <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
                     </div>
                     <div className="divide-y divide-slate-800 bg-slate-950/30">
                       {men.map(({ p, s }, idx) => (
