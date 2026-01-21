@@ -92,6 +92,11 @@ export interface TournamentStateV1 {
   matches: Match[]
   /** When set, the tournament is locked (read-only) across the app. */
   tournamentLockedAt?: string | null
+  /**
+   * Monotonic lock revision. Incremented on every lock/unlock to resolve cloud conflicts without relying on client clocks.
+   * Missing values default to 0.
+   */
+  tournamentLockRev?: number
   updatedAt: string
 }
 
@@ -104,6 +109,11 @@ export interface TournamentStateV2 {
   matches: Match[]
   /** When set, the tournament is locked (read-only) across the app. */
   tournamentLockedAt?: string | null
+  /**
+   * Monotonic lock revision. Incremented on every lock/unlock to resolve cloud conflicts without relying on client clocks.
+   * Missing values default to 0.
+   */
+  tournamentLockRev?: number
   updatedAt: string
 }
 

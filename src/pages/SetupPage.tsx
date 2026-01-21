@@ -3,7 +3,7 @@ import type { ClubId, EventType, PlayerId } from '../domain/types'
 import { seedKey } from '../domain/keys'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTournamentStore } from '../store/tournamentStore'
-import { normalizeTournamentState } from '../store/tournamentStore'
+import { normalizeTournamentState } from '../store/normalizeTournamentState'
 import { CommitInput } from '../components/CommitInput'
 import {
   clearTournamentIdFromUrl,

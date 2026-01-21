@@ -1,5 +1,5 @@
 import type { Match, TournamentStateV2 } from '../domain/types'
-import { normalizeTournamentState } from './tournamentStore'
+import { normalizeTournamentState } from './normalizeTournamentState'
 import { supabase } from './supabaseClient'
 
 export type CloudSyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'

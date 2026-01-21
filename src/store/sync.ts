@@ -1,5 +1,5 @@
 import type { TournamentStateV2 } from '../domain/types'
-import { normalizeTournamentState } from './tournamentStore'
+import { normalizeTournamentState } from './normalizeTournamentState'
 
 export type SyncStatus = 'disabled' | 'connecting' | 'connected' | 'error'
 
