@@ -517,7 +517,14 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             // last-write-wins for core config (only once we've hydrated for this tid).
             // When switching tid, we MUST allow older tournaments to overwrite the current in-memory state.
             if (hydratedTidRef.current === tid) {
-              if (remote.updatedAt && stateUpdatedAtRef.current && remote.updatedAt <= stateUpdatedAtRef.current) return
+              // IMPORTANT: device clocks can be skewed. We still want tournament lock/unlock to
+              // propagate in realtime to read-only screens (TV), even if updatedAt comparisons are weird.
+              const localLocked = stateRef.current.tournamentLockedAt ?? null
+              const remoteLocked = remote.tournamentLockedAt ?? null
+              const lockChanged = localLocked !== remoteLocked
+              if (!lockChanged) {
+                if (remote.updatedAt && stateUpdatedAtRef.current && remote.updatedAt <= stateUpdatedAtRef.current) return
+              }
             }
             isApplyingRemote.current = true
             // Preserve current match scores (they come from match rows) but only after we've hydrated for this tid.
@@ -605,7 +612,13 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   }, [location.key, location.search, location.hash])
 
   function coreSignature(s: TournamentStateV2) {
-    return JSON.stringify({ clubs: s.clubs, divisions: s.divisions, players: s.players, divisionConfigs: s.divisionConfigs })
+    return JSON.stringify({
+      clubs: s.clubs,
+      divisions: s.divisions,
+      players: s.players,
+      divisionConfigs: s.divisionConfigs,
+      tournamentLockedAt: s.tournamentLockedAt ?? null,
+    })
   }
 
   function scheduleSignature(matches: TournamentStateV2['matches']) {
