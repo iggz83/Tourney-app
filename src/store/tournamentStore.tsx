@@ -26,6 +26,8 @@ const STORAGE_KEY_V1 = 'ictpt_state_v1'
 type Action =
   | { type: 'reset' }
   | { type: 'import'; state: TournamentStateV2; source?: 'local' | 'remote' }
+  | { type: 'tournament.lock' }
+  | { type: 'tournament.unlock' }
   | { type: 'club.add'; clubId: ClubId; name: string }
   | { type: 'club.remove'; clubId: ClubId }
   | { type: 'club.name.set'; clubId: ClubId; name: string }
@@ -53,6 +55,15 @@ function touch(state: TournamentStateV2): TournamentStateV2 {
 }
 
 function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
+  if (
+    state.tournamentLockedAt &&
+    action.type !== 'import' &&
+    action.type !== 'tournament.unlock' &&
+    action.type !== 'tournament.lock'
+  ) {
+    return state
+  }
+
   switch (action.type) {
     case 'reset':
       return createInitialTournamentState()
@@ -60,6 +71,14 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       // IMPORTANT: Don't "touch" remote imports; otherwise we treat remote updates as local edits and
       // will immediately re-push back to Supabase (causing schedule churn / delete+reinsert loops).
       return action.source === 'remote' ? action.state : touch(action.state)
+    case 'tournament.lock': {
+      if (state.tournamentLockedAt) return state
+      return touch({ ...state, tournamentLockedAt: new Date().toISOString() })
+    }
+    case 'tournament.unlock': {
+      if (!state.tournamentLockedAt) return state
+      return touch({ ...state, tournamentLockedAt: null })
+    }
     case 'club.add': {
       const clubId = action.clubId.trim()
       if (!clubId.length) return state
@@ -319,6 +338,7 @@ function migrateV1toV2(v1: TournamentStateV1): TournamentStateV2 {
     players: newPlayers,
     divisionConfigs,
     matches,
+    tournamentLockedAt: null,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -371,6 +391,8 @@ type Store = {
   }
   actions: {
     reset(): void
+    lockTournament(): void
+    unlockTournament(): void
     importState(state: TournamentStateV2): void
     addClub(clubId: ClubId, name: string): void
     removeClub(clubId: ClubId): void
@@ -659,6 +681,8 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   const actions = useMemo<Store['actions']>(() => {
     return {
       reset: () => dispatch({ type: 'reset' }),
+      lockTournament: () => dispatch({ type: 'tournament.lock' }),
+      unlockTournament: () => dispatch({ type: 'tournament.unlock' }),
       importState: (s) => dispatch({ type: 'import', state: s }),
       addClub: (clubId, name) => dispatch({ type: 'club.add', clubId, name }),
       removeClub: (clubId) => dispatch({ type: 'club.remove', clubId }),

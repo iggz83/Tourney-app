@@ -70,11 +70,16 @@ export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
   const [round, setRound] = useState<'all' | string>('all')
-  const [eventFilter, setEventFilter] = useState<string>('all')
+  const [eventFilters, setEventFilters] = useState<string[]>([])
+  const [needsScoresOnly, setNeedsScoresOnly] = useState<boolean>(false)
+  const [team1, setTeam1] = useState<string>('all')
+  const [team2, setTeam2] = useState<string>('all')
+  const [quickSearch, setQuickSearch] = useState<string>('')
   const [fullLineupsOnly, setFullLineupsOnly] = useState<boolean>(false)
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
   const totalMatches = state.matches.length
+  const tournamentLocked = Boolean(state.tournamentLockedAt)
 
   const playersById = useMemo(() => getPlayersById(state), [state])
 
@@ -88,11 +93,32 @@ export function ScoreEntryPage() {
 
     let ms = state.matches
     if (divisionId !== 'all') ms = ms.filter((m) => m.divisionId === divisionId)
-    if (eventFilter !== 'all') {
-      const [eventType, seedRaw] = eventFilter.split(':')
-      const seed = Number(seedRaw)
-      if (!isEventType(eventType) || !Number.isFinite(seed)) return []
-      ms = ms.filter((m) => m.eventType === eventType && m.seed === seed)
+    if (eventFilters.length) {
+      const allowed = new Set<string>()
+      for (const v of eventFilters) {
+        const [eventType, seedRaw] = v.split(':')
+        const seed = Number(seedRaw)
+        if (!isEventType(eventType) || !Number.isFinite(seed)) continue
+        allowed.add(`${eventType}:${seed}`)
+      }
+      if (allowed.size === 0) return []
+      ms = ms.filter((m) => allowed.has(`${m.eventType}:${m.seed}`))
+    }
+    if (team1 !== 'all' || team2 !== 'all') {
+      const t1 = team1 !== 'all' ? team1 : null
+      const t2 = team2 !== 'all' ? team2 : null
+      ms = ms.filter((m) => {
+        const hasT1 = t1 ? m.clubA === t1 || m.clubB === t1 : true
+        const hasT2 = t2 ? m.clubA === t2 || m.clubB === t2 : true
+        if (!hasT1 || !hasT2) return false
+        if (t1 && t2) {
+          return (m.clubA === t1 && m.clubB === t2) || (m.clubA === t2 && m.clubB === t1)
+        }
+        return true
+      })
+    }
+    if (needsScoresOnly) {
+      ms = ms.filter((m) => !m.score || !m.completedAt)
     }
     if (fullLineupsOnly) {
       ms = ms.filter((m) => {
@@ -103,8 +129,49 @@ export function ScoreEntryPage() {
         return isNamedPlayer(aPair[0]) && isNamedPlayer(aPair[1]) && isNamedPlayer(bPair[0]) && isNamedPlayer(bPair[1])
       })
     }
+    const q = quickSearch.trim().toLowerCase()
+    if (q.length) {
+      const divisionNameById = new Map(state.divisions.map((d) => [d.id, d.name]))
+      const divisionCodeById = new Map(state.divisions.map((d) => [d.id, d.code]))
+      ms = ms.filter((m) => {
+        const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
+        const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
+        const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+        const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+        const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+        const hay = [
+          divisionNameById.get(m.divisionId) ?? m.divisionId,
+          divisionCodeById.get(m.divisionId) ?? '',
+          String(m.round),
+          String(m.court),
+          eventLabel(m),
+          m.clubA,
+          m.clubB,
+          `${m.clubA} vs ${m.clubB}`,
+          aNames,
+          bNames,
+          `${aNames} | ${bNames}`,
+          m.score ? `${m.score.a}-${m.score.b}` : '',
+        ]
+          .join(' ')
+          .toLowerCase()
+        return hay.includes(q)
+      })
+    }
     return [...ms].sort(byMatchOrder)
-  }, [state.matches, state.divisionConfigs, divisionId, eventFilter, fullLineupsOnly, playersById])
+  }, [
+    state.matches,
+    state.divisionConfigs,
+    state.divisions,
+    divisionId,
+    eventFilters,
+    team1,
+    team2,
+    needsScoresOnly,
+    fullLineupsOnly,
+    quickSearch,
+    playersById,
+  ])
 
   const availableRounds = useMemo(() => {
     const s = new Set<number>()
@@ -201,10 +268,13 @@ export function ScoreEntryPage() {
     const divisionLabel =
       divisionId === 'all' ? 'All divisions' : divisionNameById.get(divisionId) ?? divisionId
     const roundLabel = round === 'all' ? 'All rounds' : `Round ${round}`
-    const eventLabelFilter =
-      eventFilter === 'all'
-        ? 'All events'
-        : SEEDED_EVENTS.find((ev) => `${ev.eventType}:${ev.seed}` === eventFilter)?.label ?? eventFilter
+    const eventLabelFilter = (() => {
+      if (!eventFilters.length) return 'All events'
+      const labels = eventFilters
+        .map((v) => SEEDED_EVENTS.find((ev) => `${ev.eventType}:${ev.seed}` === v)?.label ?? v)
+        .filter(Boolean)
+      return labels.length ? labels.join(', ') : 'All events'
+    })()
 
     const rowsHtml = sorted
       .map((m) => {
@@ -363,67 +433,50 @@ export function ScoreEntryPage() {
           <div className="mt-1 text-xs text-slate-400">
             Total matches: <span className="tabular-nums font-semibold text-slate-200">{totalMatches}</span>
           </div>
+          {tournamentLocked ? (
+            <div className="mt-1 text-xs font-semibold text-amber-200">Tournament locked (scores are read-only)</div>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm text-slate-300">
-            <span className="mr-2 text-xs text-slate-400">Division</span>
-            <select
-              className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
-              value={divisionId}
-              onChange={(e) => setDivisionId(e.target.value)}
-            >
-              <option value="all">All</option>
-              {state.divisions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-300">
-            <span className="mr-2 text-xs text-slate-400">Round</span>
-            <select
-              className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
-              value={round}
-              onChange={(e) => {
-                const v = e.target.value
-                setRound(v)
+          {tournamentLocked ? (
+            <button
+              className="rounded-md border border-amber-900/60 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/40"
+              onClick={() => {
+                if (
+                  !confirm(
+                    'Re-open tournament?\n\nThis will re-enable editing scores and regenerating schedules.\n\nContinue?',
+                  )
+                )
+                  return
+                actions.unlockTournament()
               }}
+              title="Re-open to allow edits again"
             >
-              <option value="all">All</option>
-              {availableRounds.map((r) => (
-                <option key={r} value={String(r)}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-slate-300">
-            <span className="mr-2 text-xs text-slate-400">Event</span>
-            <select
-              className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
-              value={eventFilter}
-              onChange={(e) => setEventFilter(e.target.value)}
+              Re-open tournament
+            </button>
+          ) : (
+            <button
+              className="rounded-md bg-amber-800 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700"
+              onClick={() => {
+                if (
+                  !confirm(
+                    'Complete tournament?\n\nThis will LOCK the tournament so scores cannot be edited.\nYou can re-open it later if needed.\n\nContinue?',
+                  )
+                )
+                  return
+                actions.lockTournament()
+              }}
+              title="Lock the tournament to prevent any score edits"
             >
-              <option value="all">All</option>
-              {SEEDED_EVENTS.map((ev) => (
-                <option key={`${ev.eventType}:${ev.seed}`} value={`${ev.eventType}:${ev.seed}`}>
-                  {ev.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-1 text-sm text-slate-200">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-slate-200"
-              checked={fullLineupsOnly}
-              onChange={(e) => setFullLineupsOnly(e.target.checked)}
-            />
-            <span className="text-sm">Full lineups</span>
-          </label>
+              Complete tournament
+            </button>
+          )}
           <button
-            className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
+            className={[
+              'rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700',
+              tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-slate-800' : '',
+            ].join(' ')}
+            disabled={tournamentLocked}
             onClick={() => {
               if (
                 !confirm(
@@ -445,7 +498,11 @@ export function ScoreEntryPage() {
             Print
           </button>
           <button
-            className="rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40"
+            className={[
+              'rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40',
+              tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
+            ].join(' ')}
+            disabled={tournamentLocked}
             onClick={() => {
               if (
                 !confirm(
@@ -459,6 +516,183 @@ export function ScoreEntryPage() {
           >
             Reset all scores
           </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <div className="text-sm font-semibold text-slate-200">Filters</div>
+            <div className="text-xs text-slate-400">
+              Showing <span className="tabular-nums font-semibold text-slate-200">{sorted.length}</span> of{' '}
+              <span className="tabular-nums font-semibold text-slate-200">{totalMatches}</span> matches
+            </div>
+          </div>
+          <button
+            type="button"
+            className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-900"
+            onClick={() => {
+              setDivisionId('all')
+              setRound('all')
+              setEventFilters([])
+              setTeam1('all')
+              setTeam2('all')
+              setNeedsScoresOnly(false)
+              setFullLineupsOnly(false)
+              setQuickSearch('')
+            }}
+            title="Reset all filters"
+          >
+            Reset filters
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
+          <label className="text-sm text-slate-300 lg:col-span-3">
+            <div className="mb-1 text-xs text-slate-400">Division</div>
+            <select
+              className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+              value={divisionId}
+              onChange={(e) => setDivisionId(e.target.value)}
+            >
+              <option value="all">All</option>
+              {state.divisions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm text-slate-300 lg:col-span-3">
+            <div className="mb-1 text-xs text-slate-400">Round</div>
+            <select
+              className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+              value={round}
+              onChange={(e) => setRound(e.target.value)}
+            >
+              <option value="all">All</option>
+              {availableRounds.map((r) => (
+                <option key={r} value={String(r)}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="text-sm text-slate-300 md:col-span-2 lg:col-span-6">
+            <div className="mb-1 text-xs text-slate-400">Event</div>
+            <details className="group relative">
+              <summary className="cursor-pointer list-none rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100 hover:bg-slate-950">
+                {eventFilters.length === 0
+                  ? 'All events'
+                  : eventFilters.length === 1
+                    ? SEEDED_EVENTS.find((ev) => `${ev.eventType}:${ev.seed}` === eventFilters[0])?.label ?? eventFilters[0]
+                    : `${eventFilters.length} selected`}
+                <span className="float-right text-slate-400 group-open:rotate-180">▾</span>
+              </summary>
+              <div className="absolute z-20 mt-1 w-full min-w-[220px] rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
+                <div className="max-h-56 overflow-auto pr-1">
+                  {SEEDED_EVENTS.map((ev) => {
+                    const v = `${ev.eventType}:${ev.seed}`
+                    const checked = eventFilters.includes(v)
+                    return (
+                      <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-slate-200 hover:bg-slate-900">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-slate-200"
+                          checked={checked}
+                          onChange={(e) => {
+                            const nextChecked = e.target.checked
+                            setEventFilters((prev) => {
+                              if (nextChecked) return prev.includes(v) ? prev : [...prev, v]
+                              return prev.filter((x) => x !== v)
+                            })
+                          }}
+                        />
+                        <span className="truncate">{ev.label}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-900"
+                    onClick={() => setEventFilters([])}
+                  >
+                    All
+                  </button>
+                  <div className="text-xs text-slate-400">{eventFilters.length ? `${eventFilters.length} selected` : 'All selected'}</div>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <label className="text-sm text-slate-300 lg:col-span-4">
+            <div className="mb-1 text-xs text-slate-400">Team 1</div>
+            <select
+              className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+              value={team1}
+              onChange={(e) => setTeam1(e.target.value)}
+            >
+              <option value="all">Any</option>
+              {state.clubs.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.id}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm text-slate-300 lg:col-span-4">
+            <div className="mb-1 text-xs text-slate-400">Team 2</div>
+            <select
+              className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+              value={team2}
+              onChange={(e) => setTeam2(e.target.value)}
+            >
+              <option value="all">Any</option>
+              {state.clubs.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.id}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="lg:col-span-4">
+            <div className="mb-1 text-xs text-slate-400">Options</div>
+            <div className="flex min-h-[40px] flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-slate-200"
+                  checked={needsScoresOnly}
+                  onChange={(e) => setNeedsScoresOnly(e.target.checked)}
+                />
+                <span className="text-sm">Needs scores</span>
+              </label>
+              <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-slate-200"
+                  checked={fullLineupsOnly}
+                  onChange={(e) => setFullLineupsOnly(e.target.checked)}
+                />
+                <span className="text-sm">Full lineups</span>
+              </label>
+            </div>
+          </div>
+
+          <label className="text-sm text-slate-300 md:col-span-2 lg:col-span-12">
+            <div className="mb-1 text-xs text-slate-400">Quick search</div>
+            <input
+              className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+              value={quickSearch}
+              onChange={(e) => setQuickSearch(e.target.value)}
+              placeholder="Search anything (division, event, teams, players, round/court, score...)"
+            />
+          </label>
         </div>
       </div>
 
@@ -496,7 +730,7 @@ export function ScoreEntryPage() {
             const aWon = computed.winnerClubId === m.clubA
             const bWon = computed.winnerClubId === m.clubB
 
-            const locked = !!m.completedAt
+            const locked = tournamentLocked || !!m.completedAt
             const draft = drafts[m.id] ?? { a: m.score?.a?.toString() ?? '', b: m.score?.b?.toString() ?? '' }
             const showA = locked ? (m.score?.a?.toString() ?? '') : draft.a
             const showB = locked ? (m.score?.b?.toString() ?? '') : draft.b
@@ -556,7 +790,11 @@ export function ScoreEntryPage() {
                     }
                     placeholder="0"
                   />
-                  {locked ? (
+                  {tournamentLocked ? (
+                    <span className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs font-medium text-slate-400">
+                      Locked
+                    </span>
+                  ) : locked ? (
                     <button
                       className="rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-100 hover:bg-slate-700"
                       title="Unlock to edit"
@@ -594,17 +832,19 @@ export function ScoreEntryPage() {
                       </button>
                     </>
                   )}
-                  <button
-                    className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
-                    title="Reset score"
-                    onClick={() => {
-                      if (!confirm(`Reset score for ${rowId}?`)) return
-                      actions.setScore(m.id, undefined)
-                      setDrafts((prev) => ({ ...prev, [m.id]: { a: '', b: '' } }))
-                    }}
-                  >
-                    Reset
-                  </button>
+                  {tournamentLocked ? null : (
+                    <button
+                      className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
+                      title="Reset score"
+                      onClick={() => {
+                        if (!confirm(`Reset score for ${rowId}?`)) return
+                        actions.setScore(m.id, undefined)
+                        setDrafts((prev) => ({ ...prev, [m.id]: { a: '', b: '' } }))
+                      }}
+                    >
+                      Reset
+                    </button>
+                  )}
                 </div>
               </div>
             )

@@ -90,6 +90,8 @@ export interface TournamentStateV1 {
   players: Array<Omit<Player, 'divisionId'>>
   divisionConfigs: DivisionConfig[]
   matches: Match[]
+  /** When set, the tournament is locked (read-only) across the app. */
+  tournamentLockedAt?: string | null
   updatedAt: string
 }
 
@@ -100,6 +102,8 @@ export interface TournamentStateV2 {
   players: Player[]
   divisionConfigs: DivisionConfig[]
   matches: Match[]
+  /** When set, the tournament is locked (read-only) across the app. */
+  tournamentLockedAt?: string | null
   updatedAt: string
 }
 
