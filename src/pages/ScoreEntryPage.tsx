@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SEEDED_EVENTS } from '../domain/constants'
 import { computeMatch } from '../domain/analytics'
 import { getDivisionConfig, getPlayersById, getMatchPlayerIdsForClub } from '../domain/selectors'
@@ -79,6 +79,7 @@ export function ScoreEntryPage() {
   const [divisionId, setDivisionId] = useState<string>('all')
   const [round, setRound] = useState<'all' | string>('all')
   const [eventFilters, setEventFilters] = useState<string[]>([])
+  const [eventFilterOpen, setEventFilterOpen] = useState<boolean>(false)
   const [needsScoresOnly, setNeedsScoresOnly] = useState<boolean>(false)
   const [team1, setTeam1] = useState<string>('all')
   const [team2, setTeam2] = useState<string>('all')
@@ -86,6 +87,7 @@ export function ScoreEntryPage() {
   const [fullLineupsOnly, setFullLineupsOnly] = useState<boolean>(false)
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
+  const eventFilterRef = useRef<HTMLDetailsElement | null>(null)
   const totalMatches = state.matches.length
   const tournamentLocked = Boolean(state.tournamentLockedAt)
 
@@ -278,6 +280,32 @@ export function ScoreEntryPage() {
   }, [filtered, sort, divisionCodeById, divisionNameById, clubLabel, playersById, state])
 
   const scheduleMissing = state.matches.length === 0
+
+  // Close the Event dropdown when clicking outside (or pressing Escape).
+  useEffect(() => {
+    if (!eventFilterOpen) return
+
+    const onPointerDown = (e: PointerEvent) => {
+      const el = eventFilterRef.current
+      if (!el) return
+      const target = e.target
+      if (!(target instanceof Node)) return
+      if (el.contains(target)) return
+      setEventFilterOpen(false)
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEventFilterOpen(false)
+    }
+
+    // Use capture so we see the event before other handlers potentially stop propagation.
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [eventFilterOpen])
 
   function handlePrintFiltered() {
     const divisionLabel =
@@ -631,8 +659,15 @@ export function ScoreEntryPage() {
 
           <div className="text-sm text-slate-300 md:col-span-2 lg:col-span-6">
             <div className="mb-1 text-xs text-slate-400">Event</div>
-            <details className="group relative">
-              <summary className="cursor-pointer list-none rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100 hover:bg-slate-950">
+            <details ref={eventFilterRef} className="group relative" open={eventFilterOpen}>
+              <summary
+                className="cursor-pointer list-none rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100 hover:bg-slate-950"
+                onClick={(e) => {
+                  // Prevent native <details> toggling so we can control it and support click-outside close.
+                  e.preventDefault()
+                  setEventFilterOpen((v) => !v)
+                }}
+              >
                 {eventFilters.length === 0
                   ? 'All events'
                   : eventFilters.length === 1
