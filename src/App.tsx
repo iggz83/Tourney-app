@@ -24,7 +24,6 @@ function Shell({ children }: { children: React.ReactNode }) {
               <div className="truncate text-sm font-semibold tracking-wide text-slate-200">
                 Inter-Club Pickleball Tournament Tracker
               </div>
-              <div className="truncate text-xs text-slate-400">4 Clubs • 3 Rounds • Multi-division standings</div>
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <CloudSyncIndicator />
