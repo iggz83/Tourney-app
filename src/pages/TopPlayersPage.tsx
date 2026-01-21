@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { computePlayerStandings } from '../domain/analytics'
 import { useTournamentStore } from '../store/tournamentStore'
 
@@ -188,6 +189,15 @@ export function TopPlayersPage() {
             className="font-semibold tracking-wide text-slate-100"
             style={{ fontSize: 'clamp(16px, calc(var(--tp-base) * 1.15 * 1px), 240px)', lineHeight: 1.05 }}
           >
+            <Link
+              to="/scores"
+              aria-label="Go to Scores"
+              title="Go to Scores"
+              className="mr-2 inline-block text-slate-100 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 rounded"
+              style={{ fontSize: '1em', lineHeight: 'inherit' }}
+            >
+              🏆
+            </Link>
             Top Players
           </div>
           <div className="text-slate-500 tabular-nums" style={{ fontSize: 'clamp(10px, calc(var(--tp-base) * 0.55 * 1px), 40px)' }}>

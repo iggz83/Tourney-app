@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { computeClubStandings } from '../domain/analytics'
 import { useTournamentStore } from '../store/tournamentStore'
 
@@ -84,6 +85,15 @@ export function TvPage() {
             className="font-semibold tracking-wide text-slate-100"
             style={{ fontSize: `${clamp(basePx * 1.1, 16, 220)}px`, lineHeight: 1.05 }}
           >
+            <Link
+              to="/scores"
+              aria-label="Go to Scores"
+              title="Go to Scores"
+              className="mr-2 inline-block text-slate-100 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 rounded"
+              style={{ fontSize: '1em', lineHeight: 'inherit' }}
+            >
+              🏆
+            </Link>
             Club Standings
           </div>
           <div className="text-slate-500 tabular-nums" style={{ fontSize: `${clamp(basePx * 0.55, 10, 40)}px` }}>
