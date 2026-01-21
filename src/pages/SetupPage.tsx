@@ -396,7 +396,7 @@ export function SetupPage() {
 
       {pickerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
             <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
               <div>
                 <div className="text-sm font-semibold text-slate-100">Tournaments</div>
@@ -421,8 +421,8 @@ export function SetupPage() {
                 <div className="overflow-hidden rounded-xl border border-slate-800">
                   <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
                     <div className="col-span-3">Name</div>
-                    <div className="col-span-5">Tournament ID</div>
-                    <div className="col-span-2">Updated</div>
+                    <div className="col-span-4">Tournament ID</div>
+                    <div className="col-span-3">Updated</div>
                     <div className="col-span-2 text-right">Actions</div>
                   </div>
                   <div className="divide-y divide-slate-800 bg-slate-950/30">
@@ -431,8 +431,10 @@ export function SetupPage() {
                         <div className="col-span-3 truncate text-sm font-semibold text-slate-100">
                           {t.name?.trim()?.length ? t.name : <span className="text-slate-500">(unnamed)</span>}
                         </div>
-                        <div className="col-span-5 font-mono text-xs text-slate-200">{t.id}</div>
-                        <div className="col-span-2 text-xs text-slate-400">{new Date(t.updated_at).toLocaleDateString()}</div>
+                        <div className="col-span-4 font-mono text-xs text-slate-200">{t.id}</div>
+                        <div className="col-span-3 whitespace-nowrap text-xs text-slate-400">
+                          {new Date(t.updated_at).toLocaleString()}
+                        </div>
                         <div className="col-span-2 flex justify-end gap-2">
                           <button
                             className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium hover:bg-slate-700"
