@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { computePlayerStandings } from '../domain/analytics'
 import { useTournamentStore } from '../store/tournamentStore'
 
@@ -22,6 +22,9 @@ function clamp(n: number, min: number, max: number) {
 
 export function TopPlayersPage() {
   const { state } = useTournamentStore()
+  const location = useLocation()
+  const search = location.search || ''
+  const scoresHref = search && search.startsWith('?') ? `/scores${search}` : '/scores'
   const TOP_N = 5
   const BASE_INIT = 18
 
@@ -190,7 +193,7 @@ export function TopPlayersPage() {
             style={{ fontSize: 'clamp(16px, calc(var(--tp-base) * 1.15 * 1px), 240px)', lineHeight: 1.05 }}
           >
             <Link
-              to="/scores"
+              to={scoresHref}
               aria-label="Go to Scores"
               title="Go to Scores"
               className="mr-2 inline-block text-slate-100 hover:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 rounded"
