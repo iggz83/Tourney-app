@@ -10,6 +10,7 @@ export function TvPage() {
   const { state } = useTournamentStore()
 
   const clubStandings = useMemo(() => computeClubStandings(state), [state])
+  const tournamentLocked = Boolean(state.tournamentLockedAt)
 
   // TV should use the full club names (configured in Setup -> Club Directory).
   const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name || c.id])), [state.clubs])
@@ -94,12 +95,30 @@ export function TvPage() {
           <div ref={listRef} className="h-full">
             <div className="flex h-full flex-col gap-2">
               {clubStandings.map((row, idx) => (
+                // When the tournament is locked, show medals for the top 3.
+                // Keep alignment by using the same fixed-width rank column.
                 <div
                   key={row.clubId}
                   className="grid w-full grid-cols-[1.3em_minmax(0,1fr)_4.5em_4.2em] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2"
                   style={{ fontSize: `${basePx}px`, lineHeight: 1.35 }}
                 >
-                  <div className="text-center font-bold text-slate-200">{idx + 1}</div>
+                  <div className="flex items-center justify-center font-bold text-slate-200">
+                    {tournamentLocked && idx === 0 ? (
+                      <span aria-label="Gold medal" title="1st">
+                        🥇
+                      </span>
+                    ) : tournamentLocked && idx === 1 ? (
+                      <span aria-label="Silver medal" title="2nd">
+                        🥈
+                      </span>
+                    ) : tournamentLocked && idx === 2 ? (
+                      <span aria-label="Bronze medal" title="3rd">
+                        🥉
+                      </span>
+                    ) : (
+                      idx + 1
+                    )}
+                  </div>
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                   </div>
