@@ -1,22 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SEEDED_EVENTS } from '../domain/constants'
 import { computeMatch } from '../domain/analytics'
+import { getPlayerName, getPlayerNameOr } from '../domain/playerName'
 import { getDivisionConfig, getPlayersById, getMatchPlayerIdsForClub } from '../domain/selectors'
 import type { Match, TournamentStateV2 } from '../domain/types'
-import { useTournamentStore } from '../store/tournamentStore'
+import { useTournamentStore } from '../store/useTournamentStore'
 
-function fullName(p?: { firstName: string; lastName: string }) {
-  if (!p) return '—'
-  const s = `${p.firstName} ${p.lastName}`.trim()
-  return s.length ? s : '—'
-}
-
-function displayPlayerName(p?: { firstName: string; lastName: string; clubId?: string }) {
-  if (!p) return '—'
-  if (p.clubId && p.firstName.trim() === p.clubId) {
-    return p.lastName.trim().length ? p.lastName.trim() : '—'
-  }
-  return fullName(p)
+function displayPlayerName(p?: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
+  return getPlayerNameOr(p, '—')
 }
 
 function eventLabel(match: Match) {
@@ -98,7 +89,7 @@ export function ScoreEntryPage() {
       if (!playerId) return false
       const p = playersById.get(playerId)
       if (!p) return false
-      return Boolean(p.firstName.trim().length || p.lastName.trim().length)
+      return Boolean(getPlayerName(p).trim().length)
     }
   }, [playersById])
 

@@ -1,12 +1,12 @@
-/* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { generateSchedule } from '../domain/scheduler'
 import { SEEDED_EVENTS } from '../domain/constants'
 import { seedKey } from '../domain/keys'
-import type { ClubId, EventType, MatchId, PlayerId, TournamentStateV2 } from '../domain/types'
+import type { PlayerId, TournamentStateV2 } from '../domain/types'
 import { createInitialTournamentState } from './state'
 import { normalizeTournamentState } from './normalizeTournamentState'
+import { TournamentStoreContext } from './useTournamentStore'
 import {
   connectCloudSync,
   ensureTournamentRow,
@@ -20,40 +20,29 @@ import {
   upsertTournamentCoreState,
   upsertTournamentMatches,
 } from './cloudSync'
+import type { TournamentStore, TournamentStoreAction } from './tournamentStoreTypes'
 
 const STORAGE_KEY_V2 = 'ictpt_state_v2'
 const STORAGE_KEY_V1 = 'ictpt_state_v1'
 
-type Action =
-  | { type: 'reset' }
-  | { type: 'import'; state: TournamentStateV2; source?: 'local' | 'remote' }
-  | { type: 'tournament.lock' }
-  | { type: 'tournament.unlock' }
-  | { type: 'club.add'; clubId: ClubId; name: string }
-  | { type: 'club.remove'; clubId: ClubId }
-  | { type: 'club.name.set'; clubId: ClubId; name: string }
-  | { type: 'player.update'; playerId: PlayerId; firstName: string; lastName: string }
-  | { type: 'division.autoseed'; divisionId: string; clubId?: ClubId }
-  | { type: 'division.club.enabled.set'; divisionId: string; clubId: ClubId; enabled: boolean }
-  | {
-      type: 'division.seed.set'
-      divisionId: string
-      clubId: ClubId
-      eventType: EventType
-      seed: number
-      playerIds: [PlayerId | null, PlayerId | null]
-    }
-  | { type: 'schedule.generate' }
-  | { type: 'schedule.regenerate' }
-  | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number]; source?: 'local' | 'remote' }
-  | { type: 'match.delete'; matchId: MatchId; source?: 'local' | 'remote' }
-  | { type: 'matches.deleteMany'; matchIds: MatchId[]; source?: 'local' | 'remote' }
-  | { type: 'matches.scores.clearAll' }
-  | { type: 'match.unlock'; matchId: MatchId }
-  | { type: 'match.score.set'; matchId: MatchId; score?: { a: number; b: number } }
+type Action = TournamentStoreAction
 
 function touch(state: TournamentStateV2): TournamentStateV2 {
   return { ...state, updatedAt: new Date().toISOString() }
+}
+
+function stripLegacyNameFieldsForPersist(s: TournamentStateV2): TournamentStateV2 {
+  return {
+    ...s,
+    players: s.players.map((p) => {
+      // Ensure we don't write legacy firstName/lastName anymore.
+      const { firstName: _firstName, lastName: _lastName, ...rest } = p as unknown as {
+        firstName?: unknown
+        lastName?: unknown
+      } & typeof p
+      return rest
+    }),
+  }
 }
 
 function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
@@ -101,8 +90,7 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
             divisionId: division.id,
             gender: 'F',
             // Don't prepopulate roster player names.
-            firstName: '',
-            lastName: '',
+            name: '',
           })
         }
         for (let i = 1; i <= 4; i++) {
@@ -112,8 +100,7 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
             divisionId: division.id,
             gender: 'M',
             // Don't prepopulate roster player names.
-            firstName: '',
-            lastName: '',
+            name: '',
           })
         }
       }
@@ -154,9 +141,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, name: action.name } : c))
       return touch({ ...state, clubs })
     }
-    case 'player.update': {
+    case 'player.name.set': {
       const players = state.players.map((p) =>
-        p.id === action.playerId ? { ...p, firstName: action.firstName, lastName: action.lastName } : p,
+        p.id === action.playerId ? { ...p, name: action.name } : p,
       )
       return touch({ ...state, players })
     }
@@ -313,49 +300,6 @@ function loadState(): TournamentStateV2 {
   }
 }
 
-type Store = {
-  state: TournamentStateV2
-  dispatch: React.Dispatch<Action>
-  cloud: {
-    enabled: boolean
-    tid: string | null
-    hydrated: boolean
-    status: CloudSyncStatus
-    inFlight: number
-    lastSyncedAt: string | null
-    lastSyncedUpdatedAt: string | null
-    error: string | null
-  }
-  actions: {
-    reset(): void
-    lockTournament(): void
-    unlockTournament(): void
-    importState(state: TournamentStateV2): void
-    addClub(clubId: ClubId, name: string): void
-    removeClub(clubId: ClubId): void
-    setClubName(clubId: ClubId, name: string): void
-    setDivisionClubEnabled(divisionId: string, clubId: ClubId, enabled: boolean): void
-    updatePlayer(playerId: PlayerId, firstName: string, lastName: string): void
-    autoSeed(divisionId: string, clubId?: ClubId): void
-    unlockMatch(matchId: MatchId): void
-    clearAllScores(): void
-    setSeed(
-      divisionId: string,
-      clubId: ClubId,
-      eventType: EventType,
-      seed: number,
-      playerIds: [PlayerId | null, PlayerId | null],
-    ): void
-    generateSchedule(): void
-    regenerateSchedule(): void
-    setScore(matchId: MatchId, score?: { a: number; b: number }): void
-    deleteMatches(matchIds: MatchId[]): void
-    exportJson(): string
-  }
-}
-
-const Ctx = createContext<Store | null>(null)
-
 export function TournamentStoreProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const [state, dispatch] = useReducer(reducer, undefined, loadState)
@@ -394,7 +338,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   }
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(state))
+    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(stripLegacyNameFieldsForPersist(state)))
   }, [state])
 
   useEffect(() => {
@@ -525,7 +469,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
 
           // Ensure cloud has core; if remote core is missing, push local core.
           if (!remoteCore) {
-            trackCloudWrite(local.updatedAt, upsertTournamentCoreState(tid, { ...local, matches: [] }))
+            trackCloudWrite(local.updatedAt, upsertTournamentCoreState(tid, { ...stripLegacyNameFieldsForPersist(local), matches: [] }))
           }
 
           // Ensure cloud has schedule rows; ONLY do this for a brand-new tournament row.
@@ -599,7 +543,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     if (prevCoreSigRef.current !== coreSig) {
       prevCoreSigRef.current = coreSig
       // keep cloud core small; matches are in tournament_matches
-      trackCloudWrite(state.updatedAt, upsertTournamentCoreState(tid, { ...state, matches: [] }))
+      trackCloudWrite(state.updatedAt, upsertTournamentCoreState(tid, { ...stripLegacyNameFieldsForPersist(state), matches: [] }))
     }
 
     // Schedule updates (upsert all matches when schedule structure changes)
@@ -630,7 +574,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     }
   }, [state])
 
-  const actions = useMemo<Store['actions']>(() => {
+  const actions = useMemo<TournamentStore['actions']>(() => {
     return {
       reset: () => dispatch({ type: 'reset' }),
       lockTournament: () => dispatch({ type: 'tournament.lock' }),
@@ -641,7 +585,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       setClubName: (clubId, name) => dispatch({ type: 'club.name.set', clubId, name }),
       setDivisionClubEnabled: (divisionId, clubId, enabled) =>
         dispatch({ type: 'division.club.enabled.set', divisionId, clubId, enabled }),
-      updatePlayer: (playerId, firstName, lastName) => dispatch({ type: 'player.update', playerId, firstName, lastName }),
+      setPlayerName: (playerId, name) => dispatch({ type: 'player.name.set', playerId, name }),
       autoSeed: (divisionId, clubId) => dispatch({ type: 'division.autoseed', divisionId, clubId }),
       unlockMatch: (matchId) => dispatch({ type: 'match.unlock', matchId }),
       clearAllScores: () => dispatch({ type: 'matches.scores.clearAll' }),
@@ -651,14 +595,14 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       regenerateSchedule: () => dispatch({ type: 'schedule.regenerate' }),
       setScore: (matchId, score) => dispatch({ type: 'match.score.set', matchId, score }),
       deleteMatches: (matchIds) => dispatch({ type: 'matches.deleteMany', matchIds }),
-      exportJson: () => JSON.stringify(state, null, 2),
+      exportJson: () => JSON.stringify(stripLegacyNameFieldsForPersist(state), null, 2),
     }
   }, [state])
 
   const cloudEnabled = shouldEnableCloudSync()
   const tid = tidRef.current
   const hydrated = !!tid && hydratedTidRef.current === tid
-  const store = useMemo<Store>(
+  const store = useMemo<TournamentStore>(
     () => ({
       state,
       dispatch,
@@ -676,12 +620,6 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     }),
     [actions, cloudEnabled, dispatch, hydrated, inFlight, lastSyncedAt, lastSyncedUpdatedAt, state, syncError, syncStatus, tid],
   )
-  return <Ctx.Provider value={store}>{children}</Ctx.Provider>
-}
-
-export function useTournamentStore(): Store {
-  const v = useContext(Ctx)
-  if (!v) throw new Error('useTournamentStore must be used within TournamentStoreProvider')
-  return v
+  return <TournamentStoreContext.Provider value={store}>{children}</TournamentStoreContext.Provider>
 }
 

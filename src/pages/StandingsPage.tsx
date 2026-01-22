@@ -1,19 +1,10 @@
 import { useMemo, useState } from 'react'
 import { computeClubStandings, computeIndividualCoverage, computePlayerStandings } from '../domain/analytics'
-import { useTournamentStore } from '../store/tournamentStore'
+import { getPlayerNameOr } from '../domain/playerName'
+import { useTournamentStore } from '../store/useTournamentStore'
 
-function fullName(p: { firstName: string; lastName: string }) {
-  const s = `${p.firstName} ${p.lastName}`.trim()
-  return s.length ? s : '(unnamed)'
-}
-
-function displayPlayerName(p: { firstName: string; lastName: string; clubId: string }) {
-  // If firstName is the club acronym, hide it here.
-  if (p.firstName.trim() === p.clubId) {
-    const last = p.lastName.trim()
-    return last.length ? last : '(unnamed)'
-  }
-  return fullName(p)
+function displayPlayerName(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
+  return getPlayerNameOr(p, '(unnamed)')
 }
 
 export function StandingsPage() {

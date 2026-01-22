@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useTournamentStore } from '../store/tournamentStore'
+import { useTournamentStore } from '../store/useTournamentStore'
 
 function fmtTime(iso: string) {
   try {

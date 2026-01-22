@@ -33,8 +33,11 @@ export interface Player {
   clubId: ClubId
   divisionId: DivisionId
   gender: Gender
-  firstName: string
-  lastName: string
+  /** Single display name used throughout the UI. */
+  name: string
+  /** Legacy fields kept for backwards compatibility with older saved tournaments. */
+  firstName?: string
+  lastName?: string
 }
 
 export interface SeededEvent {
@@ -87,7 +90,14 @@ export interface TournamentStateV1 {
   version: 1
   clubs: Club[]
   divisions: Division[]
-  players: Array<Omit<Player, 'divisionId'>>
+  // Legacy player shape (pre "divisionId per player" model).
+  players: Array<{
+    id: PlayerId
+    clubId: ClubId
+    gender: Gender
+    firstName: string
+    lastName: string
+  }>
   divisionConfigs: DivisionConfig[]
   matches: Match[]
   /** When set, the tournament is locked (read-only) across the app. */

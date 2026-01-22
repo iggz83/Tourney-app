@@ -1,8 +1,9 @@
 import { SEEDED_EVENTS, SKILL_DIVISIONS } from '../domain/constants'
 import type { ClubId, EventType, PlayerId } from '../domain/types'
 import { seedKey } from '../domain/keys'
+import { getPlayerNameOr } from '../domain/playerName'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useTournamentStore } from '../store/tournamentStore'
+import { useTournamentStore } from '../store/useTournamentStore'
 import { normalizeTournamentState } from '../store/normalizeTournamentState'
 import { CommitInput } from '../components/CommitInput'
 import {
@@ -15,9 +16,8 @@ import {
 } from '../store/cloudSync'
 import { deleteTournament, fetchTournamentName, listTournaments, type TournamentListItem, updateTournamentName } from '../store/cloudSync'
 
-function playerLabel(p: { firstName: string; lastName: string }) {
-  const full = `${p.firstName} ${p.lastName}`.trim()
-  return full.length ? full : '(unnamed)'
+function playerLabel(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
+  return getPlayerNameOr(p, '(unnamed)')
 }
 
 function rosterSlotLabel(p: { id: string; gender: 'M' | 'F' }) {
@@ -554,16 +554,10 @@ export function SetupPage() {
                         {p.gender}
                       </div>
                       <CommitInput
-                        className="col-span-5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
-                        placeholder="First"
-                        value={p.firstName}
-                        onCommit={(next) => actions.updatePlayer(p.id, next, p.lastName)}
-                      />
-                      <CommitInput
-                        className="col-span-5 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
-                        placeholder="Last"
-                        value={p.lastName}
-                        onCommit={(next) => actions.updatePlayer(p.id, p.firstName, next)}
+                        className="col-span-10 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
+                        placeholder="Player name"
+                        value={p.name ?? ''}
+                        onCommit={(next) => actions.setPlayerName(p.id, next)}
                       />
                     </div>
                   ))}

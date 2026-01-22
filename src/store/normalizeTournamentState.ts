@@ -1,64 +1,109 @@
-import type { ClubId, TournamentState, TournamentStateV1, TournamentStateV2 } from '../domain/types'
+import { SEEDED_EVENTS } from '../domain/constants'
+import { seedKey } from '../domain/keys'
+import { getPlayerName } from '../domain/playerName'
+import type { TournamentState, TournamentStateV1, TournamentStateV2 } from '../domain/types'
 import { createInitialTournamentState } from './state'
 
 function migrateV1toV2(v1: TournamentStateV1): TournamentStateV2 {
-  // The old model had 8 players per club total; new model is 8 players per club per division.
-  // We replicate each old club/gender slot into *each division* and update seed mappings accordingly.
-  const fresh = createInitialTournamentState()
-  const nameByOldId = new Map(v1.players.map((p) => [p.id, p]))
+  // v1 stored 8 roster slots per club total; v2 stores 8 roster slots per club per division.
+  // We replicate each old club slot into *each division* and migrate seed mappings accordingly.
+  const base = createInitialTournamentState()
+  const clubs = v1.clubs ?? []
 
-  const newPlayers = fresh.players.map((p) => {
-    const n = Number(p.id.slice(-1))
-    const legacyId = Number.isFinite(n) ? `${p.clubId}-${p.gender}${n}` : null
-    const legacy = legacyId ? nameByOldId.get(legacyId) : undefined
-    if (!legacy) return p
-    return { ...p, firstName: legacy.firstName, lastName: legacy.lastName }
-  })
+  const legacyById = new Map(v1.players.map((p) => [p.id, p] as const))
 
+  const getLegacyForSlot = (clubId: string, slot: 'W' | 'M', n: number) => {
+    // Accept multiple historical id patterns defensively.
+    const candidates =
+      slot === 'W'
+        ? [`${clubId}-W${n}`, `${clubId}-F${n}`, `${clubId}-F${n}`, `${clubId}-W${n}`]
+        : [`${clubId}-M${n}`, `${clubId}-M${n}`]
+    for (const id of candidates) {
+      const p = legacyById.get(id)
+      if (p) return p
+    }
+    return undefined
+  }
+
+  const players: TournamentStateV2['players'] = []
+  for (const division of base.divisions) {
+    for (const club of clubs) {
+      for (let i = 1; i <= 4; i++) {
+        const legacy = getLegacyForSlot(club.id, 'W', i)
+        players.push({
+          id: `${division.id}:${club.id}:W${i}`,
+          clubId: club.id,
+          divisionId: division.id,
+          gender: 'F',
+          name: legacy ? `${legacy.firstName} ${legacy.lastName}`.trim() : '',
+        })
+      }
+      for (let i = 1; i <= 4; i++) {
+        const legacy = getLegacyForSlot(club.id, 'M', i)
+        players.push({
+          id: `${division.id}:${club.id}:M${i}`,
+          clubId: club.id,
+          divisionId: division.id,
+          gender: 'M',
+          name: legacy ? `${legacy.firstName} ${legacy.lastName}`.trim() : '',
+        })
+      }
+    }
+  }
+
+  // Build empty seed config per club, then migrate any existing seed mappings.
   const oldToNewByDivision = new Map<string, Map<string, string>>() // divisionId -> oldPlayerId -> newPlayerId
-  for (const division of fresh.divisions) {
+  for (const division of base.divisions) {
     const m = new Map<string, string>()
-    for (const club of fresh.clubs) {
+    for (const club of clubs) {
       for (let i = 1; i <= 4; i++) {
         m.set(`${club.id}-W${i}`, `${division.id}:${club.id}:W${i}`)
+        m.set(`${club.id}-F${i}`, `${division.id}:${club.id}:W${i}`)
         m.set(`${club.id}-M${i}`, `${division.id}:${club.id}:M${i}`)
       }
     }
     oldToNewByDivision.set(division.id, m)
   }
 
-  const divisionConfigs = fresh.divisionConfigs.map((dc) => {
-    const prev = v1.divisionConfigs.find((x) => x.divisionId === dc.divisionId)
-    if (!prev) return dc
-    const map = oldToNewByDivision.get(dc.divisionId)!
-    const seedsByClub: TournamentStateV2['divisionConfigs'][number]['seedsByClub'] = { ...dc.seedsByClub }
-    for (const clubId of Object.keys(seedsByClub) as ClubId[]) {
-      const prevClub = prev.seedsByClub?.[clubId]
-      if (!prevClub) continue
-      const nextClub = { ...seedsByClub[clubId] }
-      for (const k of Object.keys(nextClub) as Array<keyof typeof nextClub>) {
-        const legacy = (prevClub as typeof nextClub)[k]?.playerIds
-        if (!legacy) continue
-        // Legacy (v1) was always a 2-tuple of strings, but guard defensively.
-        const legacy0 = legacy[0]
-        const legacy1 = legacy[1]
-        if (!legacy0 || !legacy1) continue
-        const a = map.get(legacy0)
-        const b = map.get(legacy1)
-        if (a && b) nextClub[k] = { playerIds: [a, b] }
+  const divisionConfigs: TournamentStateV2['divisionConfigs'] = base.divisions.map((d) => {
+    const prev = v1.divisionConfigs.find((x) => x.divisionId === d.id)
+    const seedsByClub: TournamentStateV2['divisionConfigs'][number]['seedsByClub'] = {}
+
+    for (const club of clubs) {
+      const clubRecord: Record<string, { playerIds: [string | null, string | null] }> = {}
+      for (const ev of SEEDED_EVENTS) {
+        clubRecord[seedKey(ev.eventType, ev.seed)] = { playerIds: [null, null] }
       }
-      seedsByClub[clubId] = nextClub
+
+      if (prev?.seedsByClub?.[club.id]) {
+        const map = oldToNewByDivision.get(d.id)!
+        const prevClub = prev.seedsByClub[club.id]
+        for (const k of Object.keys(clubRecord)) {
+          const legacy = (prevClub as Record<string, { playerIds?: [string | null, string | null] }>)[k]?.playerIds
+          if (!legacy) continue
+          const a = legacy[0] ? map.get(legacy[0]) : undefined
+          const b = legacy[1] ? map.get(legacy[1]) : undefined
+          if (a && b) clubRecord[k] = { playerIds: [a, b] }
+        }
+      }
+
+      seedsByClub[club.id] = clubRecord
     }
-    return { ...dc, seedsByClub }
+
+    return {
+      divisionId: d.id,
+      seedsByClub,
+      clubEnabled: prev?.clubEnabled ?? {},
+    }
   })
 
   const matches = v1.matches ?? []
 
   return {
     version: 2,
-    clubs: fresh.clubs,
-    divisions: fresh.divisions,
-    players: newPlayers,
+    clubs,
+    divisions: base.divisions,
+    players: players.map((p) => ({ ...p, name: getPlayerName(p) })),
     divisionConfigs,
     matches,
     tournamentLockedAt: v1.tournamentLockedAt ?? null,
@@ -74,6 +119,13 @@ export function normalizeTournamentState(candidate: unknown): TournamentStateV2 
     const v2 = parsed as TournamentStateV2
     return {
       ...v2,
+      players: (v2.players ?? []).map((p) => {
+        const { firstName: _firstName, lastName: _lastName, ...rest } = p as unknown as {
+          firstName?: unknown
+          lastName?: unknown
+        } & typeof p
+        return { ...rest, name: getPlayerName(p) }
+      }),
       tournamentLockedAt: v2.tournamentLockedAt ?? null,
       tournamentLockRev: typeof v2.tournamentLockRev === 'number' ? v2.tournamentLockRev : v2.tournamentLockedAt ? 1 : 0,
     }

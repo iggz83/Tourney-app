@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { computeClubStandings } from '../domain/analytics'
-import { useTournamentStore } from '../store/tournamentStore'
+import { useTournamentStore } from '../store/useTournamentStore'
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))

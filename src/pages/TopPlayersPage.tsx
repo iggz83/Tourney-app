@@ -1,19 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { computePlayerStandings } from '../domain/analytics'
-import { useTournamentStore } from '../store/tournamentStore'
+import { getPlayerNameOr } from '../domain/playerName'
+import { useTournamentStore } from '../store/useTournamentStore'
 
-function fullName(p: { firstName: string; lastName: string }) {
-  const s = `${p.firstName} ${p.lastName}`.trim()
-  return s.length ? s : '(unnamed)'
-}
-
-function displayPlayerName(p: { firstName: string; lastName: string; clubId: string }) {
-  if (p.firstName.trim() === p.clubId) {
-    const last = p.lastName.trim()
-    return last.length ? last : '(unnamed)'
-  }
-  return fullName(p)
+function displayPlayerName(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
+  return getPlayerNameOr(p, '(unnamed)')
 }
 
 function clamp(n: number, min: number, max: number) {
