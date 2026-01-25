@@ -1,11 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { computePlayerStandings } from '../domain/analytics'
-import { getPlayerNameOr } from '../domain/playerName'
+import { getPlayerName } from '../domain/playerName'
 import { useTournamentStore } from '../store/useTournamentStore'
 
-function displayPlayerName(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
-  return getPlayerNameOr(p, '(unnamed)')
+function hasPlayerName(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
+  return getPlayerName(p).trim().length > 0
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -35,14 +35,14 @@ export function TopPlayersPage() {
 
     return state.divisions.map((d) => {
       const women = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'F')
+        .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id) }))
         .filter((x): x is { p: (typeof x)['p']; s: NonNullable<(typeof x)['s']> } => Boolean(x.s))
         .sort((x, y) => compare(x.s, y.s))
         .slice(0, TOP_N)
 
       const men = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'M')
+        .filter((p) => p.divisionId === d.id && p.gender === 'M' && hasPlayerName(p))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id) }))
         .filter((x): x is { p: (typeof x)['p']; s: NonNullable<(typeof x)['s']> } => Boolean(x.s))
         .sort((x, y) => compare(x.s, y.s))
@@ -232,7 +232,7 @@ export function TopPlayersPage() {
                         <div key={p.id} className="grid grid-cols-[1.3em_minmax(0,1fr)_6.8em] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
                           <div className="text-center font-bold text-slate-300">{idx + 1}</div>
                           <div className="min-w-0 truncate font-semibold text-slate-100">
-                            {displayPlayerName(p)} <span className="text-slate-500 font-medium">({p.clubId})</span>
+                            {getPlayerName(p)} <span className="text-slate-500 font-medium">({p.clubId})</span>
                           </div>
                           <div className="text-right tabular-nums text-slate-200 whitespace-nowrap">
                             {s.wins}-{s.losses} • {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
@@ -254,7 +254,7 @@ export function TopPlayersPage() {
                         <div key={p.id} className="grid grid-cols-[1.3em_minmax(0,1fr)_6.8em] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
                           <div className="text-center font-bold text-slate-300">{idx + 1}</div>
                           <div className="min-w-0 truncate font-semibold text-slate-100">
-                            {displayPlayerName(p)} <span className="text-slate-500 font-medium">({p.clubId})</span>
+                            {getPlayerName(p)} <span className="text-slate-500 font-medium">({p.clubId})</span>
                           </div>
                           <div className="text-right tabular-nums text-slate-200 whitespace-nowrap">
                             {s.wins}-{s.losses} • {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}

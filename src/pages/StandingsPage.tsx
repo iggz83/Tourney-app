@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { computeClubStandings, computeIndividualCoverage, computePlayerStandings } from '../domain/analytics'
-import { getPlayerNameOr } from '../domain/playerName'
+import { getPlayerName } from '../domain/playerName'
 import { useTournamentStore } from '../store/useTournamentStore'
 
-function displayPlayerName(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
-  return getPlayerNameOr(p, '(unnamed)')
+function hasPlayerName(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
+  return getPlayerName(p).trim().length > 0
 }
 
 export function StandingsPage() {
@@ -33,12 +33,12 @@ export function StandingsPage() {
 
     return state.divisions.map((d) => {
       const women = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'F')
+        .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id)! }))
         .sort((x, y) => compare(x.s, y.s))
 
       const men = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'M')
+        .filter((p) => p.divisionId === d.id && p.gender === 'M' && hasPlayerName(p))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id)! }))
         .sort((x, y) => compare(x.s, y.s))
 
@@ -135,7 +135,7 @@ export function StandingsPage() {
                         <div key={p.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
                           <div className="col-span-1 text-slate-400">{idx + 1}</div>
                           <div className="col-span-5 min-w-0 truncate font-semibold text-slate-100">
-                            {displayPlayerName(p)}
+                            {getPlayerName(p)}
                           </div>
                           <div className="col-span-3 min-w-0 truncate text-slate-300">{clubNameById.get(p.clubId) ?? p.clubId}</div>
                           <div className="col-span-2 text-right tabular-nums text-slate-100 whitespace-nowrap">
@@ -162,7 +162,7 @@ export function StandingsPage() {
                         <div key={p.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
                           <div className="col-span-1 text-slate-400">{idx + 1}</div>
                           <div className="col-span-5 min-w-0 truncate font-semibold text-slate-100">
-                            {displayPlayerName(p)}
+                            {getPlayerName(p)}
                           </div>
                           <div className="col-span-3 min-w-0 truncate text-slate-300">{clubNameById.get(p.clubId) ?? p.clubId}</div>
                           <div className="col-span-2 text-right tabular-nums text-slate-100 whitespace-nowrap">
