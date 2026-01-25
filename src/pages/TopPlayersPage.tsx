@@ -13,7 +13,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export function TopPlayersPage() {
-  const { state } = useTournamentStore()
+  const { state, cloud } = useTournamentStore()
   const location = useLocation()
   const search = location.search || ''
   const scoresHref = search && search.startsWith('?') ? `/scores${search}` : '/scores'
@@ -195,8 +195,11 @@ export function TopPlayersPage() {
             </Link>
             Top Players
           </div>
-          <div className="text-slate-500 tabular-nums" style={{ fontSize: 'clamp(10px, calc(var(--tp-base) * 0.55 * 1px), 40px)' }}>
-            Updated {new Date(state.updatedAt).toLocaleTimeString()}
+          <div
+            className="text-slate-500 tabular-nums"
+            style={{ fontSize: 'clamp(10px, calc(var(--tp-base) * 0.55 * 1px), 40px)' }}
+          >
+            Updated {new Date((cloud.enabled && cloud.lastSyncedAt) || state.updatedAt).toLocaleTimeString()}
           </div>
         </div>
 

@@ -8,7 +8,7 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export function TvPage() {
-  const { state } = useTournamentStore()
+  const { state, cloud } = useTournamentStore()
   const location = useLocation()
   const search = location.search || ''
   const scoresHref = search && search.startsWith('?') ? `/scores${search}` : '/scores'
@@ -100,7 +100,7 @@ export function TvPage() {
             Club Standings
           </div>
           <div className="text-slate-500 tabular-nums" style={{ fontSize: `${clamp(basePx * 0.55, 10, 40)}px` }}>
-            Updated {new Date(state.updatedAt).toLocaleTimeString()}
+            Updated {new Date((cloud.enabled && cloud.lastSyncedAt) || state.updatedAt).toLocaleTimeString()}
           </div>
         </div>
 
