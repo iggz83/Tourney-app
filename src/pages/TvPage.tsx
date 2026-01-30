@@ -7,6 +7,14 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
+function sameBoolRecord(a: Record<string, boolean>, b: Record<string, boolean>) {
+  const ka = Object.keys(a)
+  const kb = Object.keys(b)
+  if (ka.length !== kb.length) return false
+  for (const k of ka) if (a[k] !== b[k]) return false
+  return true
+}
+
 export function TvPage() {
   const { state, cloud } = useTournamentStore()
   const location = useLocation()
@@ -25,6 +33,7 @@ export function TvPage() {
   const isMeasuringRef = useRef<boolean>(false)
   const rafRef = useRef<number | null>(null)
   const debounceRef = useRef<number | null>(null)
+  const [useAcronymByClubId, setUseAcronymByClubId] = useState<Record<string, boolean>>({})
 
   useLayoutEffect(() => {
     const el = listRef.current
@@ -36,6 +45,23 @@ export function TvPage() {
       debounceRef.current = window.setTimeout(() => {
         rafRef.current = requestAnimationFrame(() => measure())
       }, 90)
+    }
+
+    const measureNameOverflow = () => {
+      const nodes = el.querySelectorAll<HTMLElement>('[data-role="club-name-cell"][data-club-id]')
+      const next: Record<string, boolean> = {}
+      nodes.forEach((cell) => {
+        const clubId = cell.getAttribute('data-club-id') || ''
+        if (!clubId) return
+        const full = cell.querySelector<HTMLElement>('[data-role="club-fullname-measure"]')
+        if (!full) return
+        const txt = (full.textContent ?? '').trim()
+        if (!txt.length || txt === clubId) return
+        const containerW = cell.clientWidth
+        const fullW = full.offsetWidth
+        next[clubId] = fullW > containerW + 1
+      })
+      setUseAcronymByClubId((prev) => (sameBoolRecord(prev, next) ? prev : next))
     }
 
     const measure = () => {
@@ -60,6 +86,9 @@ export function TvPage() {
           lastCommittedPxRef.current = next
           setBasePx(next)
         }
+
+        // After basePx is applied, determine whether any club full names would be truncated.
+        requestAnimationFrame(() => measureNameOverflow())
       } finally {
         isMeasuringRef.current = false
       }
@@ -132,8 +161,14 @@ export function TvPage() {
                       idx + 1
                     )}
                   </div>
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{clubNameById.get(row.clubId) ?? row.clubId}</div>
+                  <div className="min-w-0 relative" data-role="club-name-cell" data-club-id={row.clubId}>
+                    <div className="truncate font-semibold">
+                      {useAcronymByClubId[row.clubId] ? row.clubId : (clubNameById.get(row.clubId) ?? row.clubId)}
+                    </div>
+                    {/* Hidden measure span: always full name, used to decide whether to fall back to acronym */}
+                    <span className="absolute -z-10 invisible whitespace-nowrap" data-role="club-fullname-measure">
+                      {clubNameById.get(row.clubId) ?? row.clubId}
+                    </span>
                   </div>
                   <div className="text-right tabular-nums font-bold">
                     {row.wins}
