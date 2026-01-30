@@ -65,6 +65,43 @@ function stableServeFirstIsA(matchId: string): boolean {
   return (h & 1) === 0
 }
 
+function highlightText(text: string, needleRaw: string) {
+  const needle = needleRaw.trim()
+  if (!needle.length) return text
+  const hay = String(text)
+  const hayLower = hay.toLowerCase()
+  const needleLower = needle.toLowerCase()
+  if (!hayLower.includes(needleLower)) return hay
+
+  const out: Array<{ s: string; hit: boolean }> = []
+  let i = 0
+  while (i < hay.length) {
+    const hit = hayLower.indexOf(needleLower, i)
+    if (hit === -1) break
+    if (hit > i) out.push({ s: hay.slice(i, hit), hit: false })
+    out.push({ s: hay.slice(hit, hit + needle.length), hit: true })
+    i = hit + needle.length
+  }
+  if (i < hay.length) out.push({ s: hay.slice(i), hit: false })
+
+  return (
+    <>
+      {out.map((p, idx) =>
+        p.hit ? (
+          <span
+            key={idx}
+            className="rounded bg-amber-400/25 px-0.5 font-semibold text-amber-100 ring-1 ring-amber-400/30"
+          >
+            {p.s}
+          </span>
+        ) : (
+          <span key={idx}>{p.s}</span>
+        ),
+      )}
+    </>
+  )
+}
+
 export function ScoreEntryPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
@@ -198,6 +235,7 @@ export function ScoreEntryPage() {
   const divisionCodeById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.code])), [state.divisions])
   // Non-TV view uses acronyms (club ids) even if full names are configured for TV.
   const clubLabel = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.id])), [state.clubs])
+  const highlightNeedle = useMemo(() => quickSearch.trim(), [quickSearch])
 
   const sorted = useMemo(() => {
     if (!sort) return filtered
@@ -815,25 +853,35 @@ export function ScoreEntryPage() {
             const evShort = eventLabel(m).replace(/\s+/g, '')
             const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
 
+            const divisionText = divisionNameById.get(m.divisionId) ?? m.divisionId
+            const eventText = eventLabel(m)
+            const clubAText = clubLabel.get(m.clubA) ?? m.clubA
+            const clubBText = clubLabel.get(m.clubB) ?? m.clubB
+            const playersText = `${aNames} | ${bNames}`
+
             return (
               <div key={m.id} className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] items-center gap-2 px-3 py-2 text-sm">
                 {/* ID column removed (kept here in case we want to restore it later)
                   <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
                 */}
-                <div className="text-slate-300">{m.round}</div>
-                <div className="text-slate-300">{m.court > 0 ? m.court : '—'}</div>
-                <div className="truncate text-slate-200">{divisionNameById.get(m.divisionId) ?? m.divisionId}</div>
-                <div className="text-slate-200">{eventLabel(m)}</div>
+                <div className="text-slate-300">{highlightText(String(m.round), highlightNeedle)}</div>
+                <div className="text-slate-300">{highlightText(m.court > 0 ? String(m.court) : '—', highlightNeedle)}</div>
+                <div className="truncate text-slate-200">{highlightText(divisionText, highlightNeedle)}</div>
+                <div className="text-slate-200">{highlightText(eventText, highlightNeedle)}</div>
                 <div className="min-w-0">
                   <div className="truncate text-slate-100">
-                    <span className={aWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubA)}</span>
+                    <span className={aWon ? 'font-semibold text-emerald-200' : ''}>
+                      {highlightText(clubAText, highlightNeedle)}
+                    </span>
                     <span className="mx-1 text-slate-500">vs</span>
-                    <span className={bWon ? 'font-semibold text-emerald-200' : ''}>{clubLabel.get(m.clubB)}</span>
+                    <span className={bWon ? 'font-semibold text-emerald-200' : ''}>
+                      {highlightText(clubBText, highlightNeedle)}
+                    </span>
                   </div>
                 </div>
                 <div className="min-w-0 overflow-hidden">
                   <div className="truncate text-xs text-slate-300">
-                    {aNames} <span className="text-slate-600">|</span> {bNames}
+                    {highlightText(playersText, highlightNeedle)}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
