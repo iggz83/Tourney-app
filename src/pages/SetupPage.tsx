@@ -244,6 +244,8 @@ export function SetupPage() {
                   actions.importState({
                     ...state,
                     matches: [],
+                    tournamentPasswordSalt: null,
+                    tournamentPasswordHash: null,
                     updatedAt: new Date().toISOString(),
                   })
                   setTournamentName('')

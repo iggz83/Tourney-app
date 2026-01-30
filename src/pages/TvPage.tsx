@@ -112,7 +112,7 @@ export function TvPage() {
                 // Keep alignment by using the same fixed-width rank column.
                 <div
                   key={row.clubId}
-                  className="grid w-full grid-cols-[1.3em_minmax(0,1fr)_4.5em_4.2em] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2"
+                  className="grid w-full grid-cols-[1.3em_minmax(0,1fr)_3.8em_3.4em] items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2"
                   style={{ fontSize: `${basePx}px`, lineHeight: 1.35 }}
                 >
                   <div className="flex items-center justify-center font-bold text-slate-200">
