@@ -22,7 +22,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold tracking-wide text-slate-200">
-                Inter-Club Pickleball Tournament Tracker
+                Pickleball Tournament Tracker
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-3">
