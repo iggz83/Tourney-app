@@ -27,6 +27,8 @@ export function createInitialTournamentState(): TournamentStateV2 {
     matches: [],
     tournamentLockedAt: null,
     tournamentLockRev: 0,
+    tournamentPasswordSalt: null,
+    tournamentPasswordHash: null,
     updatedAt: new Date().toISOString(),
   } satisfies TournamentStateV2
 }

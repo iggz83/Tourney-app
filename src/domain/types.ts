@@ -107,6 +107,12 @@ export interface TournamentStateV1 {
    * Missing values default to 0.
    */
   tournamentLockRev?: number
+  /**
+   * Optional tournament password protection (client-side gate).
+   * NOTE: This does not encrypt data; it only prevents loading without the password.
+   */
+  tournamentPasswordSalt?: string | null
+  tournamentPasswordHash?: string | null
   updatedAt: string
 }
 
@@ -124,6 +130,12 @@ export interface TournamentStateV2 {
    * Missing values default to 0.
    */
   tournamentLockRev?: number
+  /**
+   * Optional tournament password protection (client-side gate).
+   * NOTE: This does not encrypt data; it only prevents loading without the password.
+   */
+  tournamentPasswordSalt?: string | null
+  tournamentPasswordHash?: string | null
   updatedAt: string
 }
 

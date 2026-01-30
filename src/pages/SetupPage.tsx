@@ -2,6 +2,7 @@ import { SEEDED_EVENTS, SKILL_DIVISIONS } from '../domain/constants'
 import type { ClubId, EventType, PlayerId } from '../domain/types'
 import { seedKey } from '../domain/keys'
 import { getPlayerNameOr } from '../domain/playerName'
+import { hashTournamentPassword, makePasswordSaltHex, verifyTournamentPassword } from '../domain/password'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTournamentStore } from '../store/useTournamentStore'
 import { normalizeTournamentState } from '../store/normalizeTournamentState'
@@ -14,7 +15,14 @@ import {
   setTournamentIdInUrl,
   shouldEnableCloudSync,
 } from '../store/cloudSync'
-import { deleteTournament, fetchTournamentName, listTournaments, type TournamentListItem, updateTournamentName } from '../store/cloudSync'
+import {
+  deleteTournament,
+  fetchTournamentCoreState,
+  fetchTournamentName,
+  listTournaments,
+  type TournamentListItem,
+  updateTournamentName,
+} from '../store/cloudSync'
 
 function playerLabel(p: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
   return getPlayerNameOr(p, '(unnamed)')
@@ -63,6 +71,11 @@ export function SetupPage() {
   const [newClubCode, setNewClubCode] = useState<string>('')
   const [newClubName, setNewClubName] = useState<string>('')
   const prevTidRef = useRef<string | null>(null)
+  const [pwEditing, setPwEditing] = useState(false)
+  const [pw1, setPw1] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwError, setPwError] = useState<string | null>(null)
 
   const playersForClub = useMemo(
     () => state.players.filter((p) => p.clubId === clubId && p.divisionId === divisionId),
@@ -319,6 +332,115 @@ export function SetupPage() {
             </button>
           </div>
         </div>
+
+        <div className="mt-4 border-t border-slate-800 pt-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-100">Tournament password (optional)</div>
+              <div className="text-xs text-slate-400">
+                If set, loading this tournament (including via URL) will require the password. This does <b>not</b> encrypt the data in Supabase.
+              </div>
+              <div className="mt-1 text-xs text-slate-400">
+                Status:{' '}
+                {state.tournamentPasswordHash && state.tournamentPasswordSalt ? (
+                  <span className="font-semibold text-amber-200">Set</span>
+                ) : (
+                  <span className="font-semibold text-slate-300">Not set</span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {state.tournamentPasswordHash && state.tournamentPasswordSalt ? (
+                <button
+                  className="rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40"
+                  onClick={() => {
+                    if (!confirm('Remove tournament password?\n\nThis will allow anyone with the link to load it.\n\nContinue?')) return
+                    actions.clearTournamentPassword()
+                    setPwEditing(false)
+                    setPw1('')
+                    setPw2('')
+                    setPwError(null)
+                  }}
+                >
+                  Remove password
+                </button>
+              ) : null}
+              <button
+                className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
+                disabled={pwBusy}
+                onClick={() => {
+                  setPwEditing((v) => !v)
+                  setPwError(null)
+                  setPw1('')
+                  setPw2('')
+                }}
+              >
+                {pwEditing ? 'Cancel' : state.tournamentPasswordHash && state.tournamentPasswordSalt ? 'Change password' : 'Set password'}
+              </button>
+            </div>
+          </div>
+
+          {pwEditing ? (
+            <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+              {pwError ? (
+                <div className="mb-2 rounded-lg border border-red-900/50 bg-red-950/40 p-2 text-xs text-red-200">
+                  {pwError}
+                </div>
+              ) : null}
+              <div className="grid gap-2 md:grid-cols-3">
+                <input
+                  type="password"
+                  className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600"
+                  placeholder="New password"
+                  value={pw1}
+                  onChange={(e) => setPw1(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <input
+                  type="password"
+                  className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600"
+                  placeholder="Confirm password"
+                  value={pw2}
+                  onChange={(e) => setPw2(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  className="rounded-md bg-amber-800 px-3 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  disabled={pwBusy}
+                  onClick={async () => {
+                    setPwError(null)
+                    const a = pw1
+                    const b = pw2
+                    if (!a.trim().length) {
+                      setPwError('Password cannot be empty.')
+                      return
+                    }
+                    if (a !== b) {
+                      setPwError('Passwords do not match.')
+                      return
+                    }
+                    try {
+                      setPwBusy(true)
+                      const salt = makePasswordSaltHex(16)
+                      const hash = await hashTournamentPassword({ password: a, saltHex: salt })
+                      actions.setTournamentPassword({ salt, hash })
+                      setPwEditing(false)
+                      setPw1('')
+                      setPw2('')
+                    } catch (e) {
+                      setPwError(e instanceof Error ? e.message : 'Failed to set password.')
+                    } finally {
+                      setPwBusy(false)
+                    }
+                  }}
+                >
+                  Save password
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <section className="space-y-3">
@@ -420,27 +542,52 @@ export function SetupPage() {
               ) : (
                 <div className="overflow-hidden rounded-xl border border-slate-800">
                   <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
-                    <div className="col-span-3">Name</div>
-                    <div className="col-span-4">Tournament ID</div>
-                    <div className="col-span-3">Updated</div>
+                    <div className="col-span-6">Name</div>
+                    <div className="col-span-4">Updated</div>
                     <div className="col-span-2 text-right">Actions</div>
                   </div>
                   <div className="divide-y divide-slate-800 bg-slate-950/30">
                     {tournaments.map((t) => (
                       <div key={t.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
-                        <div className="col-span-3 truncate text-sm font-semibold text-slate-100">
+                        <div className="col-span-6 truncate text-sm font-semibold text-slate-100">
                           {t.name?.trim()?.length ? t.name : <span className="text-slate-500">(unnamed)</span>}
                         </div>
-                        <div className="col-span-4 font-mono text-xs text-slate-200">{t.id}</div>
-                        <div className="col-span-3 whitespace-nowrap text-xs text-slate-400">
+                        <div className="col-span-4 whitespace-nowrap text-xs text-slate-400">
                           {new Date(t.updated_at).toLocaleString()}
                         </div>
                         <div className="col-span-2 flex justify-end gap-2">
                           <button
                             className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-medium hover:bg-slate-700"
-                            onClick={() => {
-                              setTournamentIdInUrl(t.id)
-                              setPickerOpen(false)
+                            onClick={async () => {
+                              try {
+                                // Password is enforced ONLY for "Load tournament" via this modal.
+                                const core = await fetchTournamentCoreState(t.id)
+                                const salt = (core?.tournamentPasswordSalt ?? '').trim()
+                                const hash = (core?.tournamentPasswordHash ?? '').trim()
+                                const requiresPw = salt.length > 0 && hash.length > 0
+
+                                if (requiresPw) {
+                                  for (let attempt = 0; attempt < 3; attempt++) {
+                                    const entered = window.prompt(
+                                      'This tournament is password protected.\n\nEnter password to load it:',
+                                    )
+                                    if (entered == null) return
+                                    const ok = await verifyTournamentPassword({
+                                      password: entered,
+                                      saltHex: salt,
+                                      expectedHashHex: hash,
+                                    })
+                                    if (ok) break
+                                    alert('Incorrect password.')
+                                    if (attempt === 2) return
+                                  }
+                                }
+
+                                setTournamentIdInUrl(t.id)
+                                setPickerOpen(false)
+                              } catch (e) {
+                                alert(e instanceof Error ? e.message : 'Failed to load tournament')
+                              }
                             }}
                           >
                             Load
@@ -448,8 +595,32 @@ export function SetupPage() {
                           <button
                             className="rounded-md border border-red-900/60 px-3 py-1.5 text-sm font-medium text-red-200 hover:bg-red-950/40"
                             onClick={async () => {
-                              if (!confirm(`Delete tournament ${t.id}? This cannot be undone.`)) return
+                              const label = t.name?.trim()?.length ? t.name.trim() : 'this tournament'
+                              if (!confirm(`Delete ${label}? This cannot be undone.`)) return
                               try {
+                                // If password protected, require password before deletion.
+                                const core = await fetchTournamentCoreState(t.id)
+                                const salt = (core?.tournamentPasswordSalt ?? '').trim()
+                                const hash = (core?.tournamentPasswordHash ?? '').trim()
+                                const requiresPw = salt.length > 0 && hash.length > 0
+
+                                if (requiresPw) {
+                                  for (let attempt = 0; attempt < 3; attempt++) {
+                                    const entered = window.prompt(
+                                      'This tournament is password protected.\n\nEnter password to delete it:',
+                                    )
+                                    if (entered == null) return
+                                    const ok = await verifyTournamentPassword({
+                                      password: entered,
+                                      saltHex: salt,
+                                      expectedHashHex: hash,
+                                    })
+                                    if (ok) break
+                                    alert('Incorrect password.')
+                                    if (attempt === 2) return
+                                  }
+                                }
+
                                 await deleteTournament(t.id)
                                 setTournaments((prev) => prev.filter((x) => x.id !== t.id))
                                 if (getTournamentIdFromUrl() === t.id) {

@@ -108,6 +108,8 @@ function migrateV1toV2(v1: TournamentStateV1): TournamentStateV2 {
     matches,
     tournamentLockedAt: v1.tournamentLockedAt ?? null,
     tournamentLockRev: typeof v1.tournamentLockRev === 'number' ? v1.tournamentLockRev : v1.tournamentLockedAt ? 1 : 0,
+    tournamentPasswordSalt: v1.tournamentPasswordSalt ?? null,
+    tournamentPasswordHash: v1.tournamentPasswordHash ?? null,
     updatedAt: new Date().toISOString(),
   }
 }
@@ -128,6 +130,8 @@ export function normalizeTournamentState(candidate: unknown): TournamentStateV2 
       }),
       tournamentLockedAt: v2.tournamentLockedAt ?? null,
       tournamentLockRev: typeof v2.tournamentLockRev === 'number' ? v2.tournamentLockRev : v2.tournamentLockedAt ? 1 : 0,
+      tournamentPasswordSalt: v2.tournamentPasswordSalt ?? null,
+      tournamentPasswordHash: v2.tournamentPasswordHash ?? null,
     }
   }
   if (parsed.version === 1) return migrateV1toV2(parsed)

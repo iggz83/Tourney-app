@@ -72,6 +72,12 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const nextRev = (state.tournamentLockRev ?? 0) + 1
       return touch({ ...state, tournamentLockedAt: null, tournamentLockRev: nextRev })
     }
+    case 'tournament.password.set': {
+      return touch({ ...state, tournamentPasswordSalt: action.salt, tournamentPasswordHash: action.hash })
+    }
+    case 'tournament.password.clear': {
+      return touch({ ...state, tournamentPasswordSalt: null, tournamentPasswordHash: null })
+    }
     case 'club.add': {
       const clubId = action.clubId.trim()
       if (!clubId.length) return state
@@ -392,6 +398,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       try {
         await ensureTournamentRow(tid)
         if (cancelled) return
+
         const conn = connectCloudSync({
           tid,
           onStatus: setSyncStatus,
@@ -448,6 +455,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           const remoteCore = await fetchTournamentCoreState(tid)
           const remoteMatches = await fetchTournamentMatches(tid)
           if (cancelled) return
+
           const local = stateRef.current
 
           // IMPORTANT: When a tournament exists in Supabase (remoteCore != null),
@@ -501,6 +509,8 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       divisionConfigs: s.divisionConfigs,
       tournamentLockedAt: s.tournamentLockedAt ?? null,
       tournamentLockRev: typeof s.tournamentLockRev === 'number' ? s.tournamentLockRev : 0,
+      tournamentPasswordSalt: s.tournamentPasswordSalt ?? null,
+      tournamentPasswordHash: s.tournamentPasswordHash ?? null,
     })
   }
 
@@ -579,6 +589,8 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       reset: () => dispatch({ type: 'reset' }),
       lockTournament: () => dispatch({ type: 'tournament.lock' }),
       unlockTournament: () => dispatch({ type: 'tournament.unlock' }),
+      setTournamentPassword: (password) => dispatch({ type: 'tournament.password.set', salt: password.salt, hash: password.hash }),
+      clearTournamentPassword: () => dispatch({ type: 'tournament.password.clear' }),
       importState: (s) => dispatch({ type: 'import', state: s }),
       addClub: (clubId, name) => dispatch({ type: 'club.add', clubId, name }),
       removeClub: (clubId) => dispatch({ type: 'club.remove', clubId }),
