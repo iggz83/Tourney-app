@@ -91,6 +91,7 @@ export function SetupPage() {
 
   const tid = getTournamentIdFromUrl()
   const cloudEnabled = shouldEnableCloudSync()
+  const tournamentLocked = Boolean(state.tournamentLockedAt)
 
   // Keep selected club valid if clubs list changes (add/remove).
   useEffect(() => {
@@ -148,6 +149,10 @@ export function SetupPage() {
           <button
             className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
             onClick={() => {
+              if (tournamentLocked) {
+                alert('Tournament is complete/locked. Re-open it on the Scores tab to regenerate schedules.')
+                return
+              }
               if (
                 state.matches.length > 0 &&
                 !confirm(
@@ -184,6 +189,10 @@ export function SetupPage() {
             onClick={() => {
               const tidNow = getTournamentIdFromUrl()
               const cloudOn = shouldEnableCloudSync() && Boolean(tidNow)
+              if (tournamentLocked) {
+                alert('Tournament is complete/locked and cannot be reset. Re-open it on the Scores tab first.')
+                return
+              }
               if (cloudOn) {
                 if (
                   !confirm(
