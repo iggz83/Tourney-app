@@ -182,7 +182,21 @@ export function SetupPage() {
           <button
             className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
             onClick={() => {
-              if (confirm('Reset everything? This clears rosters, mapping, and scores.')) actions.reset()
+              const tidNow = getTournamentIdFromUrl()
+              const cloudOn = shouldEnableCloudSync() && Boolean(tidNow)
+              if (cloudOn) {
+                if (
+                  !confirm(
+                    'Reset everything?\n\nWARNING: Cloud sync is enabled for this tournament.\nThis will DELETE the schedule and ALL SCORES for this tournament in the cloud (for all devices).\n\nContinue?',
+                  )
+                )
+                  return
+                const typed = window.prompt('Type RESET to confirm wiping the cloud tournament:')
+                if (typed !== 'RESET') return
+              } else {
+                if (!confirm('Reset everything? This clears rosters, mapping, and scores.')) return
+              }
+              actions.reset()
             }}
           >
             Reset

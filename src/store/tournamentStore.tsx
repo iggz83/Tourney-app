@@ -219,11 +219,15 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
     case 'schedule.generate': {
       // Simple: replace schedule and drop all scores.
       const nextMatches = generateSchedule(state)
+      // Safety: if config would generate 0 matches, do nothing (prevents accidental cloud wipe).
+      if (nextMatches.length === 0) return state
       return touch({ ...state, matches: nextMatches })
     }
     case 'schedule.regenerate': {
       // Hard reset: replace schedule and drop all scores.
       const nextMatches = generateSchedule(state)
+      // Safety: if config would generate 0 matches, do nothing (prevents accidental cloud wipe).
+      if (nextMatches.length === 0) return state
       return touch({ ...state, matches: nextMatches })
     }
     case 'matches.upsert': {
