@@ -29,6 +29,11 @@ export type TournamentStoreAction =
   | { type: 'match.delete'; matchId: MatchId; source?: 'local' | 'remote' }
   | { type: 'matches.deleteMany'; matchIds: MatchId[]; source?: 'local' | 'remote' }
   | { type: 'matches.scores.clearAll' }
+  | {
+      type: 'matches.courts.assign'
+      assignments: Array<{ matchId: MatchId; court: number }>
+      overwrite: boolean
+    }
   | { type: 'match.unlock'; matchId: MatchId }
   | { type: 'match.score.set'; matchId: MatchId; score?: { a: number; b: number } }
 
@@ -71,6 +76,7 @@ export type TournamentStore = {
     regenerateSchedule(): void
     setScore(matchId: MatchId, score?: { a: number; b: number }): void
     deleteMatches(matchIds: MatchId[]): void
+    assignCourts(assignments: Array<{ matchId: MatchId; court: number }>, overwrite: boolean): void
     exportJson(): string
   }
 }

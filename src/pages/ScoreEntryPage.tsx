@@ -113,6 +113,8 @@ export function ScoreEntryPage() {
   const [team2, setTeam2] = useState<string>('all')
   const [quickSearch, setQuickSearch] = useState<string>('')
   const [fullLineupsOnly, setFullLineupsOnly] = useState<boolean>(false)
+  const [courtList, setCourtList] = useState<string>('')
+  const [courtOverwrite, setCourtOverwrite] = useState<boolean>(false)
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
   const eventFilterRef = useRef<HTMLDetailsElement | null>(null)
@@ -506,6 +508,67 @@ export function ScoreEntryPage() {
     )
   }
 
+  function parseCourtList(raw: string): number[] {
+    const parts = raw
+      .split(/[\s,]+/g)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const out: number[] = []
+    for (const p of parts) {
+      const n = Number(p)
+      if (!Number.isFinite(n)) continue
+      const v = Math.floor(n)
+      if (v <= 0) continue
+      out.push(v)
+    }
+    // Keep order, but remove duplicates.
+    const seen = new Set<number>()
+    return out.filter((n) => (seen.has(n) ? false : (seen.add(n), true)))
+  }
+
+  function assignCourtsForVisibleMatches() {
+    if (tournamentLocked) {
+      alert('Tournament is locked. Re-open it to assign courts.')
+      return
+    }
+    const courts = parseCourtList(courtList)
+    if (courts.length === 0) {
+      alert('Enter at least one court number (e.g. 11, 12).')
+      return
+    }
+    if (sorted.length === 0) {
+      alert('No matches in the current filter.')
+      return
+    }
+
+    // Enforce grouping by (divisionId, round). Courts alternate within each group.
+    const idxByGroup = new Map<string, number>()
+    const assignments: Array<{ matchId: string; court: number }> = []
+    for (const m of sorted) {
+      if (!courtOverwrite && m.court > 0) continue
+      const key = `${m.divisionId}::${m.round}`
+      const i = idxByGroup.get(key) ?? 0
+      const court = courts[i % courts.length]!
+      assignments.push({ matchId: m.id, court })
+      idxByGroup.set(key, i + 1)
+    }
+
+    if (assignments.length === 0) {
+      alert(courtOverwrite ? 'No matches to assign.' : 'No unassigned matches to assign (all have courts).')
+      return
+    }
+
+    const groups = idxByGroup.size
+    if (
+      !confirm(
+        `Assign courts to ${assignments.length} match(es)?\n\nCourts will alternate within each Division+Round group.\nGroups affected: ${groups}\nCourts: ${courts.join(', ')}\n\nContinue?`,
+      )
+    )
+      return
+
+    actions.assignCourts(assignments, courtOverwrite)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -807,6 +870,42 @@ export function ScoreEntryPage() {
               placeholder="Search anything (division, event, teams, players, round/court, score...)"
             />
           </label>
+
+          <div className="md:col-span-2 lg:col-span-12">
+            <div className="mb-1 text-xs text-slate-400">Court assignment (by Division + Round)</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                className="w-56 max-w-full rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
+                value={courtList}
+                onChange={(e) => setCourtList(e.target.value)}
+                placeholder="Courts (e.g. 11, 12, 13)"
+              />
+              <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-slate-200"
+                  checked={courtOverwrite}
+                  onChange={(e) => setCourtOverwrite(e.target.checked)}
+                />
+                <span className="text-sm">Overwrite existing</span>
+              </label>
+              <button
+                type="button"
+                className={[
+                  'rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700',
+                  tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-slate-800' : '',
+                ].join(' ')}
+                disabled={tournamentLocked}
+                onClick={assignCourtsForVisibleMatches}
+                title="Assigns courts to the currently filtered matches, alternating within each division+round."
+              >
+                Assign courts
+              </button>
+              <div className="text-xs text-slate-500">
+                Tip: filter first; courts alternate within each <b>Division+Round</b>.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -268,6 +268,17 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const matches = state.matches.map((m) => ({ ...m, score: undefined, completedAt: undefined }))
       return touch({ ...state, matches })
     }
+    case 'matches.courts.assign': {
+      if (!action.assignments.length) return state
+      const byId = new Map(action.assignments.map((a) => [a.matchId, a.court] as const))
+      const matches = state.matches.map((m) => {
+        const nextCourt = byId.get(m.id)
+        if (nextCourt == null) return m
+        if (!action.overwrite && m.court > 0) return m
+        return { ...m, court: nextCourt }
+      })
+      return touch({ ...state, matches })
+    }
     case 'match.unlock': {
       const matches = state.matches.map((m) => (m.id === action.matchId ? { ...m, completedAt: undefined } : m))
       return touch({ ...state, matches })
@@ -611,6 +622,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       regenerateSchedule: () => dispatch({ type: 'schedule.regenerate' }),
       setScore: (matchId, score) => dispatch({ type: 'match.score.set', matchId, score }),
       deleteMatches: (matchIds) => dispatch({ type: 'matches.deleteMany', matchIds }),
+      assignCourts: (assignments, overwrite) => dispatch({ type: 'matches.courts.assign', assignments, overwrite }),
       exportJson: () => JSON.stringify(stripLegacyNameFieldsForPersist(state), null, 2),
     }
   }, [state])
