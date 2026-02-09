@@ -216,7 +216,7 @@ export function SetupPage() {
       <section className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold">Cloud Sync (Supabase)</div>
+            <div className="text-sm font-semibold">Cloud Sync</div>
             <div className="text-sm text-slate-300">
               Tournament ID (tid):{' '}
               <span className="font-mono text-slate-100">{getTournamentIdFromUrl() ?? '— not set —'}</span>
