@@ -569,6 +569,28 @@ export function ScoreEntryPage() {
     actions.assignCourts(assignments, courtOverwrite)
   }
 
+  function clearCourtsForVisibleMatches() {
+    if (tournamentLocked) {
+      alert('Tournament is locked. Re-open it to clear courts.')
+      return
+    }
+    if (sorted.length === 0) {
+      alert('No matches in the current filter.')
+      return
+    }
+    const withCourts = sorted.filter((m) => m.court > 0)
+    if (withCourts.length === 0) {
+      alert('No assigned courts to clear in the current filter.')
+      return
+    }
+    if (!confirm(`Clear courts for ${withCourts.length} match(es) in the current filter?\n\nThis sets Ct back to blank.\n\nContinue?`))
+      return
+    actions.assignCourts(
+      withCourts.map((m) => ({ matchId: m.id, court: 0 })),
+      true,
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -900,6 +922,18 @@ export function ScoreEntryPage() {
                 title="Assigns courts to the currently filtered matches, alternating within each division+round."
               >
                 Assign courts
+              </button>
+              <button
+                type="button"
+                className={[
+                  'rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900',
+                  tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
+                ].join(' ')}
+                disabled={tournamentLocked}
+                onClick={clearCourtsForVisibleMatches}
+                title="Clears courts (sets Ct back to blank) for the currently filtered matches."
+              >
+                Clear courts
               </button>
               <div className="text-xs text-slate-500">
                 Tip: filter first; courts alternate within each <b>Division+Round</b>.
