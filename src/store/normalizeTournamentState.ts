@@ -101,6 +101,7 @@ function migrateV1toV2(v1: TournamentStateV1): TournamentStateV2 {
 
   return {
     version: 2,
+    tournamentName: String(v1.tournamentName ?? '').trim(),
     clubs,
     divisions: base.divisions,
     players: players.map((p) => ({ ...p, name: getPlayerName(p) })),
@@ -121,6 +122,7 @@ export function normalizeTournamentState(candidate: unknown): TournamentStateV2 
     const v2 = parsed as TournamentStateV2
     return {
       ...v2,
+      tournamentName: String((v2 as unknown as { tournamentName?: unknown }).tournamentName ?? ''),
       players: (v2.players ?? []).map((p) => {
         const { firstName: _firstName, lastName: _lastName, ...rest } = p as unknown as {
           firstName?: unknown

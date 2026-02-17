@@ -7,6 +7,7 @@ export type TournamentStoreAction =
   | { type: 'import'; state: TournamentStateV2; source?: 'local' | 'remote' }
   | { type: 'tournament.lock' }
   | { type: 'tournament.unlock' }
+  | { type: 'tournament.name.set'; name: string }
   | { type: 'tournament.password.set'; salt: string; hash: string }
   | { type: 'tournament.password.clear' }
   | { type: 'club.add'; clubId: ClubId; name: string }
@@ -54,6 +55,7 @@ export type TournamentStore = {
     reset(): void
     lockTournament(): void
     unlockTournament(): void
+    setTournamentName(name: string): void
     setTournamentPassword(password: { salt: string; hash: string }): void
     clearTournamentPassword(): void
     importState(state: TournamentStateV2): void

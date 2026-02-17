@@ -13,6 +13,7 @@ import {
   ensureTournamentIdInUrl,
   fetchTournamentCoreState,
   fetchTournamentMatches,
+  fetchTournamentName,
   getTournamentIdFromUrl,
   setTournamentMatchScore,
   shouldEnableCloudSync,
@@ -71,6 +72,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       if (!state.tournamentLockedAt) return state
       const nextRev = (state.tournamentLockRev ?? 0) + 1
       return touch({ ...state, tournamentLockedAt: null, tournamentLockRev: nextRev })
+    }
+    case 'tournament.name.set': {
+      return touch({ ...state, tournamentName: action.name })
     }
     case 'tournament.password.set': {
       return touch({ ...state, tournamentPasswordSalt: action.salt, tournamentPasswordHash: action.hash })
@@ -469,6 +473,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         try {
           const remoteCore = await fetchTournamentCoreState(tid)
           const remoteMatches = await fetchTournamentMatches(tid)
+          const remoteName = await fetchTournamentName(tid).catch(() => '')
           if (cancelled) return
 
           const local = stateRef.current
@@ -480,9 +485,11 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           // Local state is only used to initialize a brand-new tournament (remoteCore == null).
           const chosenCore = remoteCore ?? local
           const chosenMatches = remoteCore ? remoteMatches : remoteMatches.length > 0 ? remoteMatches : local.matches
+          const chosenNameRaw = String((chosenCore as unknown as { tournamentName?: unknown }).tournamentName ?? '').trim()
+          const chosenName = chosenNameRaw.length ? chosenNameRaw : String(remoteName ?? '').trim()
 
           isApplyingRemote.current = true
-          dispatch({ type: 'import', state: { ...chosenCore, matches: chosenMatches }, source: 'remote' })
+          dispatch({ type: 'import', state: { ...chosenCore, tournamentName: chosenName, matches: chosenMatches }, source: 'remote' })
           hydratedTidRef.current = tid
           setLastSyncedAt(new Date().toISOString())
           setLastSyncedUpdatedAt(chosenCore.updatedAt ?? null)
@@ -518,6 +525,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
 
   function coreSignature(s: TournamentStateV2) {
     return JSON.stringify({
+      tournamentName: s.tournamentName ?? '',
       clubs: s.clubs,
       divisions: s.divisions,
       players: s.players,
@@ -604,6 +612,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       reset: () => dispatch({ type: 'reset' }),
       lockTournament: () => dispatch({ type: 'tournament.lock' }),
       unlockTournament: () => dispatch({ type: 'tournament.unlock' }),
+      setTournamentName: (name) => dispatch({ type: 'tournament.name.set', name }),
       setTournamentPassword: (password) => dispatch({ type: 'tournament.password.set', salt: password.salt, hash: password.hash }),
       clearTournamentPassword: () => dispatch({ type: 'tournament.password.clear' }),
       importState: (s) => dispatch({ type: 'import', state: s }),

@@ -5,6 +5,7 @@ import { StandingsPage } from './pages/StandingsPage'
 import { TvPage } from './pages/TvPage'
 import { TopPlayersPage } from './pages/TopPlayersPage'
 import { CloudSyncIndicator } from './components/CloudSyncIndicator'
+import { useTournamentStore } from './store/useTournamentStore'
 
 function withSearch(pathname: string, search: string) {
   return search && search.startsWith('?') ? `${pathname}${search}` : pathname
@@ -14,6 +15,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const isBigScreen = location.pathname.startsWith('/tv') || location.pathname.startsWith('/top-players')
   const search = location.search || ''
+  const { state } = useTournamentStore()
+  const tn = (state.tournamentName ?? '').trim()
 
   return (
     <div className={isBigScreen ? 'h-dvh overflow-hidden bg-slate-950 text-slate-100' : 'min-h-dvh bg-slate-950 text-slate-100'}>
@@ -24,6 +27,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <div className="truncate text-sm font-semibold tracking-wide text-slate-200">
                 Pickleball Tournament Tracker
               </div>
+              {tn ? <div className="truncate text-xs text-slate-400">{tn}</div> : null}
             </div>
             <div className="flex shrink-0 items-center gap-3">
               <CloudSyncIndicator />

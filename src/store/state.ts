@@ -20,6 +20,7 @@ export function createInitialTournamentState(): TournamentStateV2 {
 
   return {
     version: 2,
+    tournamentName: '',
     clubs: [],
     divisions,
     players,

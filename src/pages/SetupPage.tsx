@@ -3,7 +3,7 @@ import type { ClubId, EventType, PlayerId } from '../domain/types'
 import { seedKey } from '../domain/keys'
 import { getPlayerNameOr } from '../domain/playerName'
 import { hashTournamentPassword, makePasswordSaltHex, verifyTournamentPassword } from '../domain/password'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTournamentStore } from '../store/useTournamentStore'
 import { normalizeTournamentState } from '../store/normalizeTournamentState'
 import { CommitInput } from '../components/CommitInput'
@@ -18,7 +18,6 @@ import {
 import {
   deleteTournament,
   fetchTournamentCoreState,
-  fetchTournamentName,
   listTournaments,
   type TournamentListItem,
   updateTournamentName,
@@ -67,10 +66,8 @@ export function SetupPage() {
   const [pickerLoading, setPickerLoading] = useState(false)
   const [pickerError, setPickerError] = useState<string | null>(null)
   const [tournaments, setTournaments] = useState<TournamentListItem[]>([])
-  const [tournamentName, setTournamentName] = useState<string>('')
   const [newClubCode, setNewClubCode] = useState<string>('')
   const [newClubName, setNewClubName] = useState<string>('')
-  const prevTidRef = useRef<string | null>(null)
   const [pwEditing, setPwEditing] = useState(false)
   const [pw1, setPw1] = useState('')
   const [pw2, setPw2] = useState('')
@@ -92,6 +89,7 @@ export function SetupPage() {
   const tid = getTournamentIdFromUrl()
   const cloudEnabled = shouldEnableCloudSync()
   const tournamentLocked = Boolean(state.tournamentLockedAt)
+  const tournamentName = state.tournamentName ?? ''
 
   // Keep selected club valid if clubs list changes (add/remove).
   useEffect(() => {
@@ -101,23 +99,7 @@ export function SetupPage() {
 
   const clubEnabledForDivision = (cid: ClubId) => (divisionConfig?.clubEnabled?.[cid] ?? true) !== false
 
-  useEffect(() => {
-    if (!cloudEnabled || !tid) return
-    let cancelled = false
-    if (prevTidRef.current && prevTidRef.current !== tid) {
-      setTournamentName('')
-    }
-    void fetchTournamentName(tid).then((name) => {
-      if (cancelled) return
-      const remote = (name ?? '').trim()
-      if (remote.length) setTournamentName(remote)
-      // If remote name is empty, keep whatever the user typed locally (avoid clearing on enable).
-    })
-    return () => {
-      cancelled = true
-      prevTidRef.current = tid
-    }
-  }, [cloudEnabled, tid])
+  // tournamentName is stored in core state; cloud hydration also backfills from the tournaments.name column.
 
   function importFromFile(file: File) {
     setImportError(null)
@@ -223,16 +205,16 @@ export function SetupPage() {
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <div className="text-xs font-semibold text-slate-400">Name</div>
-              <input
+              <CommitInput
                 className="w-72 max-w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
                 placeholder="e.g. 2026 Inter-Club Finals"
                 value={tournamentName}
-                onChange={(e) => setTournamentName(e.target.value)}
-                onBlur={() => {
+                onCommit={(next) => {
+                  actions.setTournamentName(next)
                   const currentTid = getTournamentIdFromUrl()
                   if (!currentTid) return
                   if (!shouldEnableCloudSync()) return
-                  void updateTournamentName(currentTid, tournamentName.trim())
+                  void updateTournamentName(currentTid, next.trim())
                 }}
               />
             </div>
@@ -266,6 +248,7 @@ export function SetupPage() {
                   // Keep setup but clear matches/scores for the new tournament
                   actions.importState({
                     ...state,
+                    tournamentName: '',
                     matches: [],
                     tournamentLockedAt: null,
                     tournamentLockRev: 0,
@@ -273,7 +256,6 @@ export function SetupPage() {
                     tournamentPasswordHash: null,
                     updatedAt: new Date().toISOString(),
                   })
-                  setTournamentName('')
                   setTournamentIdInUrl(newTid)
                   setCloudEnabledInUrl(true)
                 }}

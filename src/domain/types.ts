@@ -88,6 +88,8 @@ export interface Match {
 
 export interface TournamentStateV1 {
   version: 1
+  /** Optional display name for this tournament. */
+  tournamentName?: string
   clubs: Club[]
   divisions: Division[]
   // Legacy player shape (pre "divisionId per player" model).
@@ -118,6 +120,8 @@ export interface TournamentStateV1 {
 
 export interface TournamentStateV2 {
   version: 2
+  /** Display name for this tournament. */
+  tournamentName: string
   clubs: Club[]
   divisions: Division[]
   players: Player[]
