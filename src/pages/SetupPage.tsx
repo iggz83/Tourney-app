@@ -86,8 +86,6 @@ export function SetupPage() {
 
   const seedsForClub = divisionConfig?.seedsByClub?.[clubId]
 
-  const tid = getTournamentIdFromUrl()
-  const cloudEnabled = shouldEnableCloudSync()
   const tournamentLocked = Boolean(state.tournamentLockedAt)
   const tournamentName = state.tournamentName ?? ''
 
