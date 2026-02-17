@@ -9,6 +9,7 @@ export type TournamentListItem = {
   name: string
   created_at: string
   updated_at: string
+  locked: boolean
 }
 
 export function getTournamentIdFromUrl(): string | null {
@@ -125,20 +126,42 @@ export async function listTournaments(limit = 25): Promise<TournamentListItem[]>
   // If the DB hasn't been migrated yet, `name` might not exist; fall back gracefully.
   const first = await supabase
     .from('tournaments')
-    .select('id,name,created_at,updated_at')
+    .select('id,name,created_at,updated_at,state')
     .order('updated_at', { ascending: false })
     .limit(limit)
-  if (!first.error) return (first.data ?? []) as TournamentListItem[]
+  if (!first.error) {
+    return ((first.data ?? []) as Array<{
+      id: string
+      name?: string | null
+      created_at: string
+      updated_at: string
+      state?: { tournamentLockedAt?: string | null } | null
+    }>).map((t) => ({
+      id: t.id,
+      name: (t.name ?? '') as string,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+      locked: Boolean(t.state?.tournamentLockedAt),
+    }))
+  }
   if (String(first.error.message).includes('name')) {
     const fallback = await supabase
       .from('tournaments')
-      .select('id,created_at,updated_at')
+      .select('id,created_at,updated_at,state')
       .order('updated_at', { ascending: false })
       .limit(limit)
     if (fallback.error) throw fallback.error
-    return ((fallback.data ?? []) as Array<{ id: string; created_at: string; updated_at: string }>).map((t) => ({
-      ...t,
+    return ((fallback.data ?? []) as Array<{
+      id: string
+      created_at: string
+      updated_at: string
+      state?: { tournamentLockedAt?: string | null } | null
+    }>).map((t) => ({
+      id: t.id,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
       name: '',
+      locked: Boolean(t.state?.tournamentLockedAt),
     }))
   }
   throw first.error

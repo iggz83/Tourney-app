@@ -267,6 +267,8 @@ export function SetupPage() {
                   actions.importState({
                     ...state,
                     matches: [],
+                    tournamentLockedAt: null,
+                    tournamentLockRev: 0,
                     tournamentPasswordSalt: null,
                     tournamentPasswordHash: null,
                     updatedAt: new Date().toISOString(),
@@ -568,7 +570,8 @@ export function SetupPage() {
                 <div className="overflow-hidden rounded-xl border border-slate-800">
                   <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
                     <div className="col-span-6">Name</div>
-                    <div className="col-span-4">Updated</div>
+                    <div className="col-span-2">Status</div>
+                    <div className="col-span-2">Updated</div>
                     <div className="col-span-2 text-right">Actions</div>
                   </div>
                   <div className="divide-y divide-slate-800 bg-slate-950/30">
@@ -577,7 +580,18 @@ export function SetupPage() {
                         <div className="col-span-6 truncate text-sm font-semibold text-slate-100">
                           {t.name?.trim()?.length ? t.name : <span className="text-slate-500">(unnamed)</span>}
                         </div>
-                        <div className="col-span-4 whitespace-nowrap text-xs text-slate-400">
+                        <div className="col-span-2">
+                          {t.locked ? (
+                            <span className="rounded-full border border-amber-900/60 bg-amber-950/30 px-2 py-0.5 text-xs font-semibold text-amber-200">
+                              Complete
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-slate-700 bg-slate-950/30 px-2 py-0.5 text-xs font-semibold text-slate-200">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <div className="col-span-2 whitespace-nowrap text-xs text-slate-400">
                           {new Date(t.updated_at).toLocaleString()}
                         </div>
                         <div className="col-span-2 flex justify-end gap-2">
