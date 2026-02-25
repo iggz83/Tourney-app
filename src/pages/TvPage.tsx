@@ -147,7 +147,7 @@ export function TvPage() {
                 // Keep alignment by using the same fixed-width rank column.
                 <div
                   key={row.clubId}
-                  className="grid w-full grid-cols-[1.3em_minmax(0,1fr)_max-content_max-content] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2"
+                  className="grid w-full grid-cols-[1.3em_minmax(0,1fr)_max-content] items-center gap-4 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2"
                   style={{ fontSize: `${basePx}px`, lineHeight: 1.35 }}
                 >
                   <div className="flex items-center justify-center font-bold text-slate-200">
@@ -180,15 +180,19 @@ export function TvPage() {
                       {clubNameById.get(row.clubId) ?? row.clubId}
                     </span>
                   </div>
-                  <div className="text-right tabular-nums font-extrabold" style={{ fontSize: `${basePx * STAT_SCALE}px` }}>
-                    {row.wins}
-                    <span className="text-slate-500">-{row.losses}</span>
-                  </div>
                   <div
-                    className="text-right tabular-nums font-bold text-slate-200 whitespace-nowrap"
-                    style={{ fontSize: `${basePx * STAT_SCALE}px` }}
+                    className="text-right tabular-nums whitespace-nowrap"
+                    style={{ fontSize: `${basePx * STAT_SCALE}px`, lineHeight: 1.05 }}
                   >
-                    {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
+                    <span className="font-extrabold text-slate-100">
+                      {row.wins}
+                      <span className="text-slate-500">-{row.losses}</span>
+                    </span>
+                    <span className="mx-3 text-slate-700">•</span>
+                    <span className="font-semibold text-slate-400">PD</span>
+                    <span className="ml-2 font-extrabold text-slate-200">
+                      {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
+                    </span>
                   </div>
                 </div>
               ))}
