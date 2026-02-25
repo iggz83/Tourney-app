@@ -189,7 +189,6 @@ export function TvPage() {
                       <span className="text-slate-500">-{row.losses}</span>
                     </span>
                     <span className="mx-3 text-slate-700">•</span>
-                    <span className="font-semibold text-slate-400">PD</span>
                     <span className="ml-2 font-extrabold text-slate-200">
                       {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                     </span>
