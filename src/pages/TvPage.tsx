@@ -35,6 +35,11 @@ export function TvPage() {
   const debounceRef = useRef<number | null>(null)
   const [useAcronymByClubId, setUseAcronymByClubId] = useState<Record<string, boolean>>({})
 
+  // Make names more readable from far away by scaling them up slightly
+  // while keeping stats a bit tighter.
+  const NAME_SCALE = 1.22
+  const STAT_SCALE = 0.96
+
   useLayoutEffect(() => {
     const el = listRef.current
     if (!el) return
@@ -47,10 +52,9 @@ export function TvPage() {
       }, 90)
     }
 
-    const measureNamesAndMaybeRefit = () => {
+    const measureNameOverflow = () => {
       const nodes = el.querySelectorAll<HTMLElement>('[data-role="club-name-cell"][data-club-id]')
       const next: Record<string, boolean> = {}
-      let recommendedPx: number | null = null
       nodes.forEach((cell) => {
         const clubId = cell.getAttribute('data-club-id') || ''
         if (!clubId) return
@@ -62,29 +66,7 @@ export function TvPage() {
         const fullW = full.offsetWidth
         const over = fullW > containerW + 1
         next[clubId] = over
-        if (over && containerW > 0 && fullW > 0) {
-          // If the full name doesn't fit, prefer shrinking font size (so names remain readable)
-          // rather than immediately falling back to the acronym.
-          const px = (basePx * containerW) / fullW
-          if (Number.isFinite(px)) recommendedPx = recommendedPx == null ? px : Math.min(recommendedPx, px)
-        }
       })
-
-      // If shrinking would help, do that first. Only use acronyms when even the minimum font would overflow.
-      if (recommendedPx != null) {
-        const minPx = 12
-        const target = clamp(recommendedPx, minPx, basePx)
-        if (basePx - target >= 0.75) {
-          lastCommittedPxRef.current = target
-          setBasePx(target)
-          // Re-check next frame after the new font size paints.
-          requestAnimationFrame(() => measureNamesAndMaybeRefit())
-          return
-        }
-      }
-
-      // At this point, either names fit, or we're already at the smallest practical size.
-      // Use acronyms only when overflow remains.
       setUseAcronymByClubId((prev) => (sameBoolRecord(prev, next) ? prev : next))
     }
 
@@ -111,8 +93,8 @@ export function TvPage() {
           setBasePx(next)
         }
 
-        // After basePx is applied, ensure names fit (shrink if needed), then (only if necessary) fall back to acronyms.
-        requestAnimationFrame(() => measureNamesAndMaybeRefit())
+        // After basePx is applied, determine whether any club full names would be truncated.
+        requestAnimationFrame(() => measureNameOverflow())
       } finally {
         isMeasuringRef.current = false
       }
@@ -186,19 +168,26 @@ export function TvPage() {
                     )}
                   </div>
                   <div className="min-w-0 relative" data-role="club-name-cell" data-club-id={row.clubId}>
-                    <div className="truncate font-semibold">
+                    <div className="truncate font-black tracking-wide" style={{ fontSize: `${basePx * NAME_SCALE}px`, lineHeight: 1.05 }}>
                       {useAcronymByClubId[row.clubId] ? row.clubId : (clubNameById.get(row.clubId) ?? row.clubId)}
                     </div>
                     {/* Hidden measure span: always full name, used to decide whether to fall back to acronym */}
-                    <span className="absolute -z-10 invisible whitespace-nowrap" data-role="club-fullname-measure">
+                    <span
+                      className="absolute -z-10 invisible whitespace-nowrap font-black tracking-wide"
+                      style={{ fontSize: `${basePx * NAME_SCALE}px`, lineHeight: 1.05 }}
+                      data-role="club-fullname-measure"
+                    >
                       {clubNameById.get(row.clubId) ?? row.clubId}
                     </span>
                   </div>
-                  <div className="text-right tabular-nums font-bold">
+                  <div className="text-right tabular-nums font-extrabold" style={{ fontSize: `${basePx * STAT_SCALE}px` }}>
                     {row.wins}
                     <span className="text-slate-500">-{row.losses}</span>
                   </div>
-                  <div className="text-right tabular-nums font-semibold text-slate-200 whitespace-nowrap">
+                  <div
+                    className="text-right tabular-nums font-bold text-slate-200 whitespace-nowrap"
+                    style={{ fontSize: `${basePx * STAT_SCALE}px` }}
+                  >
                     {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
                   </div>
                 </div>
