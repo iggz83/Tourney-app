@@ -47,9 +47,10 @@ export function TvPage() {
       }, 90)
     }
 
-    const measureNameOverflow = () => {
+    const measureNamesAndMaybeRefit = () => {
       const nodes = el.querySelectorAll<HTMLElement>('[data-role="club-name-cell"][data-club-id]')
       const next: Record<string, boolean> = {}
+      let recommendedPx: number | null = null
       nodes.forEach((cell) => {
         const clubId = cell.getAttribute('data-club-id') || ''
         if (!clubId) return
@@ -59,8 +60,31 @@ export function TvPage() {
         if (!txt.length || txt === clubId) return
         const containerW = cell.clientWidth
         const fullW = full.offsetWidth
-        next[clubId] = fullW > containerW + 1
+        const over = fullW > containerW + 1
+        next[clubId] = over
+        if (over && containerW > 0 && fullW > 0) {
+          // If the full name doesn't fit, prefer shrinking font size (so names remain readable)
+          // rather than immediately falling back to the acronym.
+          const px = (basePx * containerW) / fullW
+          if (Number.isFinite(px)) recommendedPx = recommendedPx == null ? px : Math.min(recommendedPx, px)
+        }
       })
+
+      // If shrinking would help, do that first. Only use acronyms when even the minimum font would overflow.
+      if (recommendedPx != null) {
+        const minPx = 12
+        const target = clamp(recommendedPx, minPx, basePx)
+        if (basePx - target >= 0.75) {
+          lastCommittedPxRef.current = target
+          setBasePx(target)
+          // Re-check next frame after the new font size paints.
+          requestAnimationFrame(() => measureNamesAndMaybeRefit())
+          return
+        }
+      }
+
+      // At this point, either names fit, or we're already at the smallest practical size.
+      // Use acronyms only when overflow remains.
       setUseAcronymByClubId((prev) => (sameBoolRecord(prev, next) ? prev : next))
     }
 
@@ -87,15 +111,15 @@ export function TvPage() {
           setBasePx(next)
         }
 
-        // After basePx is applied, determine whether any club full names would be truncated.
-        requestAnimationFrame(() => measureNameOverflow())
+        // After basePx is applied, ensure names fit (shrink if needed), then (only if necessary) fall back to acronyms.
+        requestAnimationFrame(() => measureNamesAndMaybeRefit())
       } finally {
         isMeasuringRef.current = false
       }
     }
 
     // Initialize committed value so hysteresis has a stable baseline.
-    lastCommittedPxRef.current = lastCommittedPxRef.current || basePx
+    if (!Number.isFinite(lastCommittedPxRef.current) || lastCommittedPxRef.current <= 0) lastCommittedPxRef.current = basePx
     scheduleMeasure()
     const ro = new ResizeObserver(() => {
       if (isMeasuringRef.current) return
@@ -141,7 +165,7 @@ export function TvPage() {
                 // Keep alignment by using the same fixed-width rank column.
                 <div
                   key={row.clubId}
-                  className="grid w-full grid-cols-[1.3em_minmax(0,1fr)_3.8em_3.4em] items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2"
+                  className="grid w-full grid-cols-[1.3em_minmax(0,1fr)_max-content_max-content] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/30 px-4 py-2"
                   style={{ fontSize: `${basePx}px`, lineHeight: 1.35 }}
                 >
                   <div className="flex items-center justify-center font-bold text-slate-200">
