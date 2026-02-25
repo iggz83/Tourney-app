@@ -15,6 +15,7 @@ export function StandingsPage() {
   const clubStandings = useMemo(() => computeClubStandings(state), [state])
   const playerStandings = useMemo(() => computePlayerStandings(state), [state])
   const coverage = useMemo(() => computeIndividualCoverage(state), [state])
+  const namedPlayersCount = useMemo(() => state.players.filter(hasPlayerName).length, [state.players])
 
   // Standings should use full club names (fallback to id).
   const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name || c.id])), [state.clubs])
@@ -103,7 +104,7 @@ export function StandingsPage() {
               className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-900"
               onClick={() => setShowAll((v) => !v)}
             >
-              {showAll ? `Show top ${TOP_N} / division` : `Show all (${playerStandings.length})`}
+              {showAll ? `Show top ${TOP_N} / division` : `Show all (${namedPlayersCount})`}
             </button>
           </div>
         </div>
