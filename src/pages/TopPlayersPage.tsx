@@ -33,7 +33,8 @@ export function TopPlayersPage() {
       return b.pointsFor - a.pointsFor
     }
 
-    return state.divisions.map((d) => {
+    return state.divisions
+      .map((d) => {
       const women = state.players
         .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id) }))
@@ -50,6 +51,7 @@ export function TopPlayersPage() {
 
       return { division: d, women, men }
     })
+      .filter((x) => x.women.length + x.men.length > 0)
   }, [TOP_N, playerStandingByPlayerId, state.divisions, state.players])
 
   const rootRef = useRef<HTMLDivElement | null>(null)

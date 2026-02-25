@@ -31,7 +31,8 @@ export function StandingsPage() {
       return b.pointsFor - a.pointsFor
     }
 
-    return state.divisions.map((d) => {
+    return state.divisions
+      .map((d) => {
       const women = state.players
         .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id)! }))
@@ -48,6 +49,7 @@ export function StandingsPage() {
         men: showAll ? men : men.slice(0, TOP_N),
       }
     })
+      .filter((x) => x.women.length + x.men.length > 0)
   }, [TOP_N, playerStandingByPlayerId, showAll, state.divisions, state.players])
 
   return (
@@ -115,72 +117,78 @@ export function StandingsPage() {
             scored matches.
           </div>
         ) : null}
-        <div className="space-y-4">
-          {performersByDivision.map(({ division, women, men }) => (
-            <div key={division.id} className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-              <div className="mb-3 flex items-baseline justify-between gap-3">
-                <div className="text-sm font-semibold text-slate-100">{division.name}</div>
-                <div className="text-xs text-slate-500">{division.code}</div>
-              </div>
+        {performersByDivision.length === 0 ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4 text-sm text-slate-300">
+            No players found for any division yet.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {performersByDivision.map(({ division, women, men }) => (
+              <div key={division.id} className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
+                <div className="mb-3 flex items-baseline justify-between gap-3">
+                  <div className="text-sm font-semibold text-slate-100">{division.name}</div>
+                  <div className="text-xs text-slate-500">{division.code}</div>
+                </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="overflow-x-auto rounded-xl border border-slate-800">
-                  <div className="min-w-[520px]">
-                    <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
-                      <div>Top Women</div>
-                      <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <div className="min-w-[520px]">
+                      <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+                        <div>Top Women</div>
+                        <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
+                      </div>
+                      <div className="divide-y divide-slate-800 bg-slate-950/30">
+                        {women.map(({ p, s }, idx) => (
+                          <div key={p.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
+                            <div className="col-span-1 text-slate-400">{idx + 1}</div>
+                            <div className="col-span-5 min-w-0 truncate font-semibold text-slate-100">
+                              {getPlayerName(p)}
+                            </div>
+                            <div className="col-span-3 min-w-0 truncate text-slate-300">{clubNameById.get(p.clubId) ?? p.clubId}</div>
+                            <div className="col-span-2 text-right tabular-nums text-slate-100 whitespace-nowrap">
+                              {s.wins}
+                              <span className="text-slate-500">-{s.losses}</span>
+                            </div>
+                            <div className="col-span-1 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
+                              {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="divide-y divide-slate-800 bg-slate-950/30">
-                      {women.map(({ p, s }, idx) => (
-                        <div key={p.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
-                          <div className="col-span-1 text-slate-400">{idx + 1}</div>
-                          <div className="col-span-5 min-w-0 truncate font-semibold text-slate-100">
-                            {getPlayerName(p)}
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-800">
+                    <div className="min-w-[520px]">
+                      <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+                        <div>Top Men</div>
+                        <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
+                      </div>
+                      <div className="divide-y divide-slate-800 bg-slate-950/30">
+                        {men.map(({ p, s }, idx) => (
+                          <div key={p.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
+                            <div className="col-span-1 text-slate-400">{idx + 1}</div>
+                            <div className="col-span-5 min-w-0 truncate font-semibold text-slate-100">
+                              {getPlayerName(p)}
+                            </div>
+                            <div className="col-span-3 min-w-0 truncate text-slate-300">{clubNameById.get(p.clubId) ?? p.clubId}</div>
+                            <div className="col-span-2 text-right tabular-nums text-slate-100 whitespace-nowrap">
+                              {s.wins}
+                              <span className="text-slate-500">-{s.losses}</span>
+                            </div>
+                            <div className="col-span-1 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
+                              {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
+                            </div>
                           </div>
-                          <div className="col-span-3 min-w-0 truncate text-slate-300">{clubNameById.get(p.clubId) ?? p.clubId}</div>
-                          <div className="col-span-2 text-right tabular-nums text-slate-100 whitespace-nowrap">
-                            {s.wins}
-                            <span className="text-slate-500">-{s.losses}</span>
-                          </div>
-                          <div className="col-span-1 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
-                            {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <div className="overflow-x-auto rounded-xl border border-slate-800">
-                  <div className="min-w-[520px]">
-                    <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
-                      <div>Top Men</div>
-                      <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
-                    </div>
-                    <div className="divide-y divide-slate-800 bg-slate-950/30">
-                      {men.map(({ p, s }, idx) => (
-                        <div key={p.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
-                          <div className="col-span-1 text-slate-400">{idx + 1}</div>
-                          <div className="col-span-5 min-w-0 truncate font-semibold text-slate-100">
-                            {getPlayerName(p)}
-                          </div>
-                          <div className="col-span-3 min-w-0 truncate text-slate-300">{clubNameById.get(p.clubId) ?? p.clubId}</div>
-                          <div className="col-span-2 text-right tabular-nums text-slate-100 whitespace-nowrap">
-                            {s.wins}
-                            <span className="text-slate-500">-{s.losses}</span>
-                          </div>
-                          <div className="col-span-1 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
-                            {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="text-xs text-slate-500">Updated: {new Date(state.updatedAt).toLocaleString()}</div>

@@ -95,7 +95,7 @@ export function TvPage() {
     }
 
     // Initialize committed value so hysteresis has a stable baseline.
-    lastCommittedPxRef.current = basePx
+    lastCommittedPxRef.current = lastCommittedPxRef.current || basePx
     scheduleMeasure()
     const ro = new ResizeObserver(() => {
       if (isMeasuringRef.current) return
@@ -107,7 +107,7 @@ export function TvPage() {
       if (debounceRef.current) window.clearTimeout(debounceRef.current)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [basePx, clubStandings.length])
+  }, [clubStandings.length])
 
   return (
     <div className="h-full overflow-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-4">
@@ -115,7 +115,7 @@ export function TvPage() {
         <div className="flex items-baseline justify-between gap-4">
           <div
             className="font-semibold tracking-wide text-slate-100"
-            style={{ fontSize: `${clamp(basePx * 1.1, 16, 220)}px`, lineHeight: 1.05 }}
+            style={{ fontSize: 'clamp(18px, 5vw, 240px)', lineHeight: 1.05 }}
           >
             <Link
               to={scoresHref}
@@ -128,7 +128,7 @@ export function TvPage() {
             </Link>
             Club Standings
           </div>
-          <div className="text-slate-500 tabular-nums" style={{ fontSize: `${clamp(basePx * 0.55, 10, 40)}px` }}>
+          <div className="text-slate-500 tabular-nums" style={{ fontSize: 'clamp(10px, 1.7vw, 64px)' }}>
             Updated {new Date((cloud.enabled && cloud.lastSyncedAt) || state.updatedAt).toLocaleTimeString()}
           </div>
         </div>
