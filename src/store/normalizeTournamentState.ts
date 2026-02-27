@@ -123,6 +123,7 @@ export function normalizeTournamentState(candidate: unknown): TournamentStateV2 
     return {
       ...v2,
       tournamentName: String((v2 as unknown as { tournamentName?: unknown }).tournamentName ?? ''),
+      matches: (v2.matches ?? []).map((m) => ({ ...m, stage: (m as { stage?: unknown }).stage === 'PLAYOFF' ? 'PLAYOFF' : 'REGULAR' })),
       players: (v2.players ?? []).map((p) => {
         const { firstName: _firstName, lastName: _lastName, ...rest } = p as unknown as {
           firstName?: unknown

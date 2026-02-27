@@ -93,6 +93,7 @@ export function generateSchedule(state: Pick<TournamentStateV2, 'divisions' | 'c
             court: 0,
             clubA,
             clubB,
+            stage: 'REGULAR',
           })
         }
       }
@@ -161,6 +162,7 @@ export function generateScheduleAddMissing(args: {
             court: 0,
             clubA,
             clubB,
+            stage: 'REGULAR',
           })
           existingKeys.add(key)
           addedThisPair = true

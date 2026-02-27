@@ -3,7 +3,8 @@ import { useLocation } from 'react-router-dom'
 import { generateSchedule } from '../domain/scheduler'
 import { SEEDED_EVENTS } from '../domain/constants'
 import { seedKey } from '../domain/keys'
-import type { PlayerId, TournamentStateV2 } from '../domain/types'
+import type { ClubId, PlayerId, TournamentStateV2 } from '../domain/types'
+import { computeMatch } from '../domain/analytics'
 import { createInitialTournamentState } from './state'
 import { normalizeTournamentState } from './normalizeTournamentState'
 import { TournamentStoreContext } from './useTournamentStore'
@@ -30,6 +31,55 @@ type Action = TournamentStoreAction
 
 function touch(state: TournamentStateV2): TournamentStateV2 {
   return { ...state, updatedAt: new Date().toISOString() }
+}
+
+function makePlayoffMatchId(parts: {
+  slot: '12' | '34'
+  divisionId: string
+  clubA: ClubId
+  clubB: ClubId
+  eventType: string
+  seed: number
+}) {
+  const { slot, divisionId, clubA, clubB, eventType, seed } = parts
+  const [a, b] = [clubA, clubB].sort()
+  return `p:${slot}:${divisionId}:${eventType}:s${seed}:${a}-vs-${b}`
+}
+
+function computeClubOrderFromMatches(args: { clubs: ClubId[]; matches: TournamentStateV2['matches'] }): ClubId[] {
+  const { clubs, matches } = args
+  const byClub = new Map<ClubId, { clubId: ClubId; wins: number; losses: number; pointDiff: number; pointsFor: number }>()
+  for (const c of clubs) byClub.set(c, { clubId: c, wins: 0, losses: 0, pointDiff: 0, pointsFor: 0 })
+
+  for (const m of matches) {
+    if (!m.score) continue
+    const computed = computeMatch(m)
+    if (!computed.winnerClubId) continue
+    const a = byClub.get(m.clubA)
+    const b = byClub.get(m.clubB)
+    if (!a || !b) continue
+
+    a.pointsFor += m.score.a
+    a.pointDiff += m.score.a - m.score.b
+    b.pointsFor += m.score.b
+    b.pointDiff += m.score.b - m.score.a
+
+    if (computed.winnerClubId === m.clubA) {
+      a.wins++
+      b.losses++
+    } else {
+      b.wins++
+      a.losses++
+    }
+  }
+
+  return [...byClub.values()]
+    .sort((x, y) => {
+      if (y.wins !== x.wins) return y.wins - x.wins
+      if (y.pointDiff !== x.pointDiff) return y.pointDiff - x.pointDiff
+      return y.pointsFor - x.pointsFor
+    })
+    .map((x) => x.clubId)
 }
 
 function stripLegacyNameFieldsForPersist(s: TournamentStateV2): TournamentStateV2 {
@@ -233,6 +283,66 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       // Safety: if config would generate 0 matches, do nothing (prevents accidental cloud wipe).
       if (nextMatches.length === 0) return state
       return touch({ ...state, matches: nextMatches })
+    }
+    case 'playoff.round.add': {
+      if (state.matches.some((m) => (m.stage ?? 'REGULAR') === 'PLAYOFF')) return state
+
+      const idSet = new Set(action.matchIds)
+      const subset = state.matches.filter((m) => idSet.has(m.id) && (m.stage ?? 'REGULAR') !== 'PLAYOFF')
+      const allSubsetScored = subset.length > 0 && subset.every((m) => Boolean(m.score) && Boolean(m.completedAt))
+      if (!allSubsetScored) return state
+
+      const participatingClubs = [...new Set(subset.flatMap((m) => [m.clubA, m.clubB]))]
+      const order = computeClubOrderFromMatches({ clubs: participatingClubs, matches: subset })
+      if (order.length < 2) return state
+
+      const pairings: Array<[ClubId, ClubId, '12' | '34']> = []
+      pairings.push([order[0]!, order[1]!, '12'])
+      if (order.length >= 4) pairings.push([order[2]!, order[3]!, '34'])
+
+      const divisionIds = [...new Set(subset.map((m) => m.divisionId))]
+      const maxRoundByDivision = new Map<string, number>()
+      for (const m of state.matches) {
+        if (!divisionIds.includes(m.divisionId)) continue
+        const prev = maxRoundByDivision.get(m.divisionId) ?? 0
+        maxRoundByDivision.set(m.divisionId, Math.max(prev, Number(m.round) || 0))
+      }
+
+      const existingIds = new Set(state.matches.map((m) => m.id))
+      const additions: TournamentStateV2['matches'] = []
+      for (const divisionId of divisionIds) {
+        const nextRound = (maxRoundByDivision.get(divisionId) ?? 0) + 1
+        for (let matchupIndex = 0; matchupIndex < pairings.length; matchupIndex++) {
+          const [clubA, clubB, slot] = pairings[matchupIndex]!
+          for (const ev of SEEDED_EVENTS) {
+            const id = makePlayoffMatchId({
+              slot,
+              divisionId,
+              clubA,
+              clubB,
+              eventType: ev.eventType,
+              seed: ev.seed,
+            })
+            if (existingIds.has(id)) continue
+            additions.push({
+              id,
+              divisionId,
+              round: nextRound,
+              matchupIndex,
+              eventType: ev.eventType,
+              seed: ev.seed,
+              court: 0,
+              clubA,
+              clubB,
+              stage: 'PLAYOFF',
+            })
+            existingIds.add(id)
+          }
+        }
+      }
+
+      if (additions.length === 0) return state
+      return touch({ ...state, matches: [...state.matches, ...additions] })
     }
     case 'matches.upsert': {
       const incoming = action.match
@@ -547,6 +657,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         eventType: m.eventType,
         seed: m.seed,
         court: m.court,
+        stage: m.stage ?? 'REGULAR',
         clubA: m.clubA,
         clubB: m.clubB,
       }))
@@ -629,6 +740,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         dispatch({ type: 'division.seed.set', divisionId, clubId, eventType, seed, playerIds }),
       generateSchedule: () => dispatch({ type: 'schedule.generate' }),
       regenerateSchedule: () => dispatch({ type: 'schedule.regenerate' }),
+      addPlayoffRound: (matchIds) => dispatch({ type: 'playoff.round.add', matchIds }),
       setScore: (matchId, score) => dispatch({ type: 'match.score.set', matchId, score }),
       deleteMatches: (matchIds) => dispatch({ type: 'matches.deleteMany', matchIds }),
       assignCourts: (assignments, overwrite) => dispatch({ type: 'matches.courts.assign', assignments, overwrite }),

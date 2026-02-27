@@ -71,6 +71,8 @@ export interface MatchScore {
   b: number
 }
 
+export type MatchStage = 'REGULAR' | 'PLAYOFF'
+
 export interface Match {
   id: MatchId
   divisionId: DivisionId
@@ -82,6 +84,8 @@ export interface Match {
   court: number
   clubA: ClubId
   clubB: ClubId
+  /** Defaults to REGULAR when missing (back-compat). */
+  stage?: MatchStage
   score?: MatchScore
   completedAt?: string
 }

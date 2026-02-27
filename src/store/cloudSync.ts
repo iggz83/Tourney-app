@@ -201,6 +201,7 @@ type MatchRow = {
   event_type: string
   seed: number
   court: number
+  stage?: string | null
   club_a: string
   club_b: string
   score_a: number | null
@@ -211,14 +212,45 @@ type MatchRow = {
 
 export async function fetchTournamentMatches(tid: string): Promise<Match[]> {
   if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase
+  const first = await supabase
     .from('tournament_matches')
     .select(
-      'tournament_id,match_id,division_id,round,matchup_index,event_type,seed,court,club_a,club_b,score_a,score_b,completed_at,updated_at',
+      'tournament_id,match_id,division_id,round,matchup_index,event_type,seed,court,stage,club_a,club_b,score_a,score_b,completed_at,updated_at',
     )
     .eq('tournament_id', tid)
-  if (error) throw error
-  const rows = (data ?? []) as MatchRow[]
+  if (first.error) {
+    // Back-compat: older DB schema may not have stage column.
+    if (String(first.error.message).includes('stage')) {
+      const fallback = await supabase
+        .from('tournament_matches')
+        .select(
+          'tournament_id,match_id,division_id,round,matchup_index,event_type,seed,court,club_a,club_b,score_a,score_b,completed_at,updated_at',
+        )
+        .eq('tournament_id', tid)
+      if (fallback.error) throw fallback.error
+      const rows = (fallback.data ?? []) as MatchRow[]
+      return rows.map((r) => {
+        const score = r.score_a == null || r.score_b == null ? undefined : { a: r.score_a, b: r.score_b }
+        return {
+          id: r.match_id,
+          divisionId: r.division_id,
+          round: r.round,
+          matchupIndex: r.matchup_index,
+          eventType: r.event_type as Match['eventType'],
+          seed: r.seed,
+          court: r.court,
+          stage: 'REGULAR',
+          clubA: r.club_a as Match['clubA'],
+          clubB: r.club_b as Match['clubB'],
+          score,
+          completedAt: r.completed_at ?? undefined,
+        }
+      })
+    }
+    throw first.error
+  }
+
+  const rows = (first.data ?? []) as MatchRow[]
   return rows.map((r) => {
     const score = r.score_a == null || r.score_b == null ? undefined : { a: r.score_a, b: r.score_b }
     return {
@@ -229,6 +261,7 @@ export async function fetchTournamentMatches(tid: string): Promise<Match[]> {
       eventType: r.event_type as Match['eventType'],
       seed: r.seed,
       court: r.court,
+      stage: r.stage === 'PLAYOFF' ? 'PLAYOFF' : 'REGULAR',
       clubA: r.club_a as Match['clubA'],
       clubB: r.club_b as Match['clubB'],
       score,
@@ -264,6 +297,7 @@ export async function upsertTournamentMatches(tid: string, matches: Match[]): Pr
     event_type: m.eventType,
     seed: m.seed,
     court: m.court,
+    stage: m.stage ?? 'REGULAR',
     club_a: m.clubA,
     club_b: m.clubB,
     score_a: m.score?.a ?? null,
@@ -271,10 +305,19 @@ export async function upsertTournamentMatches(tid: string, matches: Match[]): Pr
     completed_at: m.completedAt ?? null,
   }))
 
-  const { error: upsertErr } = await supabase
+  const upsertRes = await supabase
     .from('tournament_matches')
     .upsert(payload, { onConflict: 'tournament_id,match_id' })
-  if (upsertErr) throw upsertErr
+  if (upsertRes.error) {
+    // Back-compat: if stage column doesn't exist yet, retry without it.
+    if (String(upsertRes.error.message).includes('stage')) {
+      const payloadNoStage = payload.map(({ stage: _stage, ...rest }) => rest)
+      const retry = await supabase.from('tournament_matches').upsert(payloadNoStage, { onConflict: 'tournament_id,match_id' })
+      if (retry.error) throw retry.error
+    } else {
+      throw upsertRes.error
+    }
+  }
 
   const desiredIds = new Set(matches.map((m) => m.id))
   const { data: existing, error: listErr } = await supabase
@@ -373,6 +416,7 @@ export function connectCloudSync(args: {
           eventType: String(r.event_type ?? '') as Match['eventType'],
           seed: Number(r.seed ?? 0),
           court: Number(r.court ?? 0),
+          stage: r.stage === 'PLAYOFF' ? 'PLAYOFF' : 'REGULAR',
           clubA: String(r.club_a ?? '') as Match['clubA'],
           clubB: String(r.club_b ?? '') as Match['clubB'],
           score,

@@ -79,11 +79,71 @@ export function computeClubStandings(state: TournamentStateV2): ClubStanding[] {
     }
   }
 
-  return [...byClub.values()].sort((x, y) => {
+  const baseSorted = [...byClub.values()].sort((x, y) => {
     if (y.wins !== x.wins) return y.wins - x.wins
     if (y.pointDiff !== x.pointDiff) return y.pointDiff - x.pointDiff
     return y.pointsFor - x.pointsFor
   })
+
+  // If a playoff round exists AND all playoff games are scored, use playoff results to decide final ordering
+  // for the top 2 (or top 4) while keeping the displayed record/PD from all games.
+  const playoffMatches = state.matches.filter((m) => (m.stage ?? 'REGULAR') === 'PLAYOFF')
+  if (playoffMatches.length === 0) return baseSorted
+  if (!playoffMatches.every((m) => Boolean(m.score) && Boolean(m.completedAt))) return baseSorted
+
+  const baseOrder = baseSorted.map((x) => x.clubId)
+  if (baseOrder.length < 2) return baseSorted
+
+  const top2: [ClubId, ClubId] = [baseOrder[0]!, baseOrder[1]!]
+  const hasTop4 = baseOrder.length >= 4
+  const top4: [ClubId, ClubId, ClubId, ClubId] = hasTop4
+    ? [baseOrder[0]!, baseOrder[1]!, baseOrder[2]!, baseOrder[3]!]
+    : [baseOrder[0]!, baseOrder[1]!, baseOrder[0]!, baseOrder[1]!]
+
+  function playoffResultBetween(a: ClubId, b: ClubId): { winner: ClubId; loser: ClubId } | null {
+    const ms = playoffMatches.filter((m) => {
+      return (m.clubA === a && m.clubB === b) || (m.clubA === b && m.clubB === a)
+    })
+    if (ms.length === 0) return null
+    let winsA = 0
+    let winsB = 0
+    let pdA = 0
+    let pfA = 0
+    for (const m of ms) {
+      if (!m.score) continue
+      const c = computeMatch(m)
+      if (c.winnerClubId === a) winsA++
+      else if (c.winnerClubId === b) winsB++
+      if (m.clubA === a) {
+        pdA += m.score.a - m.score.b
+        pfA += m.score.a
+      } else {
+        pdA += m.score.b - m.score.a
+        pfA += m.score.b
+      }
+    }
+    if (winsA !== winsB) return winsA > winsB ? { winner: a, loser: b } : { winner: b, loser: a }
+    if (pdA !== 0) return pdA > 0 ? { winner: a, loser: b } : { winner: b, loser: a }
+    if (pfA !== 0) return pfA > 0 ? { winner: a, loser: b } : { winner: b, loser: a }
+    // fall back to base order
+    return baseOrder.indexOf(a) < baseOrder.indexOf(b) ? { winner: a, loser: b } : { winner: b, loser: a }
+  }
+
+  const res12 = playoffResultBetween(top2[0], top2[1])
+  if (!res12) return baseSorted
+
+  const overrides: ClubId[] = []
+  overrides.push(res12.winner, res12.loser)
+  if (hasTop4) {
+    const res34 = playoffResultBetween(top4[2], top4[3])
+    if (res34) overrides.push(res34.winner, res34.loser)
+  }
+
+  const overrideSet = new Set(overrides)
+  const rest = baseSorted.filter((x) => !overrideSet.has(x.clubId))
+  const byId = new Map(baseSorted.map((x) => [x.clubId, x] as const))
+  const head = overrides.map((id) => byId.get(id)!).filter(Boolean)
+  return [...head, ...rest]
 }
 
 export function computePlayerStandings(state: TournamentStateV2): PlayerStanding[] {

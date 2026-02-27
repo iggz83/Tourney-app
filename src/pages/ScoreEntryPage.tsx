@@ -120,6 +120,7 @@ export function ScoreEntryPage() {
   const eventFilterRef = useRef<HTMLDetailsElement | null>(null)
   const totalMatches = state.matches.length
   const tournamentLocked = Boolean(state.tournamentLockedAt)
+  const hasPlayoffs = useMemo(() => state.matches.some((m) => (m.stage ?? 'REGULAR') === 'PLAYOFF'), [state.matches])
 
   const playersById = useMemo(() => getPlayersById(state), [state])
 
@@ -311,6 +312,11 @@ export function ScoreEntryPage() {
   }, [filtered, sort, divisionCodeById, divisionNameById, clubLabel, playersById, state])
 
   const scheduleMissing = state.matches.length === 0
+  const filteredRegularMatches = useMemo(() => sorted.filter((m) => (m.stage ?? 'REGULAR') !== 'PLAYOFF'), [sorted])
+  const allFilteredRegularScored = useMemo(() => {
+    if (filteredRegularMatches.length === 0) return false
+    return filteredRegularMatches.every((m) => Boolean(m.score) && Boolean(m.completedAt))
+  }, [filteredRegularMatches])
 
   // Close the Event dropdown when clicking outside (or pressing Escape).
   useEffect(() => {
@@ -659,6 +665,34 @@ export function ScoreEntryPage() {
           </button>
           <button
             className={[
+              'rounded-md border border-indigo-900/60 bg-indigo-950/30 px-3 py-2 text-sm font-medium text-indigo-200 hover:bg-indigo-950/50',
+              tournamentLocked || hasPlayoffs || !allFilteredRegularScored ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
+            ].join(' ')}
+            disabled={tournamentLocked || hasPlayoffs || !allFilteredRegularScored}
+            onClick={() => {
+              if (tournamentLocked) return
+              if (hasPlayoffs) return
+              if (!allFilteredRegularScored) return
+              if (
+                !confirm(
+                  'Add playoff round?\n\nThis will add a new round with:\n- #1 vs #2\n- #3 vs #4 (if 4+ teams)\n\nStandings will use playoff results once all playoff games are scored.\n\nContinue?',
+                )
+              )
+                return
+              actions.addPlayoffRound(filteredRegularMatches.map((m) => m.id))
+            }}
+            title={
+              hasPlayoffs
+                ? 'Playoff round already added'
+                : !allFilteredRegularScored
+                  ? 'Enter scores for the currently filtered matches first'
+                  : 'Adds a playoff round based on current standings'
+            }
+          >
+            {hasPlayoffs ? 'Playoff added' : 'Add playoff round'}
+          </button>
+          <button
+            className={[
               'rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40',
               tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
             ].join(' ')}
@@ -991,6 +1025,7 @@ export function ScoreEntryPage() {
             const clubAText = clubLabel.get(m.clubA) ?? m.clubA
             const clubBText = clubLabel.get(m.clubB) ?? m.clubB
             const playersText = `${aNames} | ${bNames}`
+            const isPlayoff = (m.stage ?? 'REGULAR') === 'PLAYOFF'
 
             return (
               <div key={m.id} className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] items-center gap-2 px-3 py-2 text-sm">
@@ -1000,7 +1035,14 @@ export function ScoreEntryPage() {
                 <div className="text-slate-300">{highlightText(String(m.round), highlightNeedle)}</div>
                 <div className="text-slate-300">{highlightText(m.court > 0 ? String(m.court) : '—', highlightNeedle)}</div>
                 <div className="truncate text-slate-200">{highlightText(divisionText, highlightNeedle)}</div>
-                <div className="text-slate-200">{highlightText(eventText, highlightNeedle)}</div>
+                <div className="text-slate-200">
+                  {isPlayoff ? (
+                    <span className="mr-2 rounded-full border border-indigo-900/60 bg-indigo-950/30 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">
+                      Playoff
+                    </span>
+                  ) : null}
+                  {highlightText(eventText, highlightNeedle)}
+                </div>
                 <div className="min-w-0">
                   <div className="truncate text-slate-100">
                     <span className={aWon ? 'font-semibold text-emerald-200' : ''}>
