@@ -317,6 +317,10 @@ export function ScoreEntryPage() {
     if (filteredRegularMatches.length === 0) return false
     return filteredRegularMatches.every((m) => Boolean(m.score) && Boolean(m.completedAt))
   }, [filteredRegularMatches])
+  const pendingFilteredDraftIds = useMemo(() => {
+    const visible = new Set(sorted.map((m) => m.id))
+    return Object.keys(drafts).filter((id) => visible.has(id))
+  }, [drafts, sorted])
 
   // Close the Event dropdown when clicking outside (or pressing Escape).
   useEffect(() => {
@@ -597,6 +601,73 @@ export function ScoreEntryPage() {
     )
   }
 
+  function saveAllFilteredScores() {
+    if (tournamentLocked) {
+      alert('Tournament is locked.')
+      return
+    }
+    if (sorted.length === 0) {
+      alert('No matches in the current filter.')
+      return
+    }
+    if (pendingFilteredDraftIds.length === 0) {
+      alert('No entered (unsaved) scores found in the current filter.')
+      return
+    }
+
+    const byId = new Map(sorted.map((m) => [m.id, m] as const))
+    const toSave: Array<{ matchId: string; score: { a: number; b: number } }> = []
+    const errors: string[] = []
+
+    for (const matchId of pendingFilteredDraftIds) {
+      const m = byId.get(matchId)
+      if (!m) continue
+      if (m.completedAt) continue
+      const d = drafts[matchId]
+      if (!d) continue
+
+      const aRaw = d.a ?? ''
+      const bRaw = d.b ?? ''
+      const aHas = aRaw.trim().length > 0
+      const bHas = bRaw.trim().length > 0
+      if (!aHas && !bHas) continue
+
+      const a = parseScore(aRaw)
+      const b = parseScore(bRaw)
+      if (a === undefined || b === undefined) {
+        const divCode = divisionCodeById.get(m.divisionId) ?? m.divisionId
+        const evShort = eventLabel(m).replace(/\s+/g, '')
+        const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
+        errors.push(rowId)
+        continue
+      }
+      toSave.push({ matchId, score: { a, b } })
+    }
+
+    if (errors.length) {
+      alert(
+        `Cannot save all yet.\n\nThese rows have invalid or incomplete scores:\n${errors.slice(0, 10).join('\n')}${
+          errors.length > 10 ? `\n… and ${errors.length - 10} more` : ''
+        }`,
+      )
+      return
+    }
+
+    if (toSave.length === 0) {
+      alert('No entered scores to save in the current filter.')
+      return
+    }
+
+    if (!confirm(`Save scores for ${toSave.length} match(es) in the current filter?`)) return
+
+    actions.setScoresMany(toSave)
+    setDrafts((prev) => {
+      const next = { ...prev }
+      for (const x of toSave) delete next[x.matchId]
+      return next
+    })
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -662,6 +733,17 @@ export function ScoreEntryPage() {
             }}
           >
             Generate schedule
+          </button>
+          <button
+            className={[
+              'rounded-md bg-emerald-800 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700',
+              tournamentLocked || pendingFilteredDraftIds.length === 0 ? 'cursor-not-allowed opacity-50 hover:bg-emerald-800' : '',
+            ].join(' ')}
+            disabled={tournamentLocked || pendingFilteredDraftIds.length === 0}
+            onClick={saveAllFilteredScores}
+            title="Saves only the entered scores in the current filter"
+          >
+            Save filtered {pendingFilteredDraftIds.length ? `(${pendingFilteredDraftIds.length})` : ''}
           </button>
           <button
             className={[
