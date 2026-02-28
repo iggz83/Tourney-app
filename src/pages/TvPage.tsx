@@ -114,7 +114,8 @@ export function TvPage() {
     }
 
     // Initialize committed value so hysteresis has a stable baseline.
-    if (!Number.isFinite(lastCommittedPxRef.current) || lastCommittedPxRef.current <= 0) lastCommittedPxRef.current = basePx
+    // (basePx state is initialized to 24; the ref is already seeded to 24 above.)
+    if (!Number.isFinite(lastCommittedPxRef.current) || lastCommittedPxRef.current <= 0) lastCommittedPxRef.current = 24
     scheduleMeasure()
     const ro = new ResizeObserver(() => {
       if (isMeasuringRef.current) return
@@ -145,7 +146,7 @@ export function TvPage() {
             >
               🏆
             </Link>
-            Club Standings
+            Team Standings
           </div>
           <div className="text-slate-500 tabular-nums" style={{ fontSize: 'clamp(10px, 1.7vw, 64px)' }}>
             Updated {new Date((cloud.enabled && cloud.lastSyncedAt) || state.updatedAt).toLocaleTimeString()}
