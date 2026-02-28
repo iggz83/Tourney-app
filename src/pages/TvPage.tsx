@@ -24,8 +24,12 @@ export function TvPage() {
   const clubStandings = useMemo(() => computeClubStandings(state), [state])
   const tournamentLocked = Boolean(state.tournamentLockedAt)
 
-  // TV should use the full club names (configured in Setup -> Club Directory).
-  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name || c.id])), [state.clubs])
+  const clubCodeById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.code || c.id])), [state.clubs])
+  // TV should use the full club names (configured in Setup -> Club Directory), falling back to club acronym (code).
+  const clubNameById = useMemo(
+    () => new Map(state.clubs.map((c) => [c.id, (c.name ?? '').trim() ? c.name : (c.code || c.id)])),
+    [state.clubs],
+  )
 
   const listRef = useRef<HTMLDivElement | null>(null)
   const [basePx, setBasePx] = useState<number>(24)
@@ -61,7 +65,8 @@ export function TvPage() {
         const full = cell.querySelector<HTMLElement>('[data-role="club-fullname-measure"]')
         if (!full) return
         const txt = (full.textContent ?? '').trim()
-        if (!txt.length || txt === clubId) return
+        const code = clubCodeById.get(clubId) ?? clubId
+        if (!txt.length || txt === clubId || txt === code) return
         const containerW = cell.clientWidth
         const fullW = full.offsetWidth
         const over = fullW > containerW + 1
@@ -169,7 +174,9 @@ export function TvPage() {
                   </div>
                   <div className="min-w-0 relative" data-role="club-name-cell" data-club-id={row.clubId}>
                     <div className="truncate font-black tracking-wide" style={{ fontSize: `${basePx * NAME_SCALE}px`, lineHeight: 1.05 }}>
-                      {useAcronymByClubId[row.clubId] ? row.clubId : (clubNameById.get(row.clubId) ?? row.clubId)}
+                      {useAcronymByClubId[row.clubId]
+                        ? (clubCodeById.get(row.clubId) ?? row.clubId)
+                        : (clubNameById.get(row.clubId) ?? clubCodeById.get(row.clubId) ?? row.clubId)}
                     </div>
                     {/* Hidden measure span: always full name, used to decide whether to fall back to acronym */}
                     <span
@@ -177,7 +184,7 @@ export function TvPage() {
                       style={{ fontSize: `${basePx * NAME_SCALE}px`, lineHeight: 1.05 }}
                       data-role="club-fullname-measure"
                     >
-                      {clubNameById.get(row.clubId) ?? row.clubId}
+                      {clubNameById.get(row.clubId) ?? clubCodeById.get(row.clubId) ?? row.clubId}
                     </span>
                   </div>
                   <div

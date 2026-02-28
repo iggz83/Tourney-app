@@ -19,6 +19,7 @@ export function TopPlayersPage() {
   const scoresHref = search && search.startsWith('?') ? `/scores${search}` : '/scores'
   const TOP_N = 5
   const BASE_INIT = 18
+  const clubCodeById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.code || c.id])), [state.clubs])
 
   const playerStandings = useMemo(() => computePlayerStandings(state), [state])
   const playerStandingByPlayerId = useMemo(
@@ -237,7 +238,8 @@ export function TopPlayersPage() {
                         <div key={p.id} className="grid grid-cols-[1.3em_minmax(0,1fr)_6.8em] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
                           <div className="text-center font-bold text-slate-300">{idx + 1}</div>
                           <div className="min-w-0 truncate font-semibold text-slate-100">
-                            {getPlayerName(p)} <span className="text-slate-500 font-medium">({p.clubId})</span>
+                            {getPlayerName(p)}{' '}
+                            <span className="text-slate-500 font-medium">({clubCodeById.get(p.clubId) ?? p.clubId})</span>
                           </div>
                           <div className="text-right tabular-nums text-slate-200 whitespace-nowrap">
                             {s.wins}-{s.losses} • {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}
@@ -259,7 +261,8 @@ export function TopPlayersPage() {
                         <div key={p.id} className="grid grid-cols-[1.3em_minmax(0,1fr)_6.8em] items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2">
                           <div className="text-center font-bold text-slate-300">{idx + 1}</div>
                           <div className="min-w-0 truncate font-semibold text-slate-100">
-                            {getPlayerName(p)} <span className="text-slate-500 font-medium">({p.clubId})</span>
+                            {getPlayerName(p)}{' '}
+                            <span className="text-slate-500 font-medium">({clubCodeById.get(p.clubId) ?? p.clubId})</span>
                           </div>
                           <div className="text-right tabular-nums text-slate-200 whitespace-nowrap">
                             {s.wins}-{s.losses} • {s.pointDiff >= 0 ? `+${s.pointDiff}` : s.pointDiff}

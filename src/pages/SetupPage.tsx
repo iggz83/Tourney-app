@@ -453,7 +453,7 @@ export function SetupPage() {
       <section className="space-y-3">
         <div>
           <h2 className="text-base font-semibold">Club Directory</h2>
-          <p className="text-sm text-slate-400">Set the full club names (TV view uses full names).</p>
+          <p className="text-sm text-slate-400">Set club acronyms and full names (TV view uses full names).</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {state.clubs.map((c) => (
@@ -471,6 +471,24 @@ export function SetupPage() {
                    Remove
                  </button>
               </div>
+              <label className="block text-xs font-semibold text-slate-400">Acronym</label>
+              <CommitInput
+                className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
+                placeholder="e.g. ABC"
+                value={c.code}
+                onCommit={(next) => {
+                  const code = next.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
+                  if (!code.length) {
+                    alert('Acronym cannot be blank.')
+                    return
+                  }
+                  if (state.clubs.some((x) => x.id !== c.id && x.code === code)) {
+                    alert(`Acronym ${code} is already used by another club.`)
+                    return
+                  }
+                  actions.setClubCode(c.id, code)
+                }}
+              />
               <label className="block text-xs font-semibold text-slate-400">Full name</label>
               <CommitInput
                 className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"

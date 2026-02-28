@@ -201,6 +201,13 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, name: action.name } : c))
       return touch({ ...state, clubs })
     }
+    case 'club.code.set': {
+      const nextCode = action.code.trim()
+      if (!nextCode.length) return state
+      if (state.clubs.some((c) => c.id !== action.clubId && c.code === nextCode)) return state
+      const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, code: nextCode } : c))
+      return touch({ ...state, clubs })
+    }
     case 'player.name.set': {
       const players = state.players.map((p) =>
         p.id === action.playerId ? { ...p, name: action.name } : p,
@@ -741,6 +748,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       addClub: (clubId, name) => dispatch({ type: 'club.add', clubId, name }),
       removeClub: (clubId) => dispatch({ type: 'club.remove', clubId }),
       setClubName: (clubId, name) => dispatch({ type: 'club.name.set', clubId, name }),
+      setClubCode: (clubId, code) => dispatch({ type: 'club.code.set', clubId, code }),
       setDivisionClubEnabled: (divisionId, clubId, enabled) =>
         dispatch({ type: 'division.club.enabled.set', divisionId, clubId, enabled }),
       setPlayerName: (playerId, name) => dispatch({ type: 'player.name.set', playerId, name }),

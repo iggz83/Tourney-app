@@ -13,6 +13,7 @@ export type TournamentStoreAction =
   | { type: 'club.add'; clubId: ClubId; name: string }
   | { type: 'club.remove'; clubId: ClubId }
   | { type: 'club.name.set'; clubId: ClubId; name: string }
+  | { type: 'club.code.set'; clubId: ClubId; code: string }
   | { type: 'player.name.set'; playerId: PlayerId; name: string }
   | { type: 'division.autoseed'; divisionId: string; clubId?: ClubId }
   | { type: 'division.club.enabled.set'; divisionId: string; clubId: ClubId; enabled: boolean }
@@ -64,6 +65,7 @@ export type TournamentStore = {
     addClub(clubId: ClubId, name: string): void
     removeClub(clubId: ClubId): void
     setClubName(clubId: ClubId, name: string): void
+    setClubCode(clubId: ClubId, code: string): void
     setDivisionClubEnabled(divisionId: string, clubId: ClubId, enabled: boolean): void
     setPlayerName(playerId: PlayerId, name: string): void
     autoSeed(divisionId: string, clubId?: ClubId): void

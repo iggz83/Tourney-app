@@ -180,6 +180,7 @@ export function ScoreEntryPage() {
     if (q.length) {
       const divisionNameById = new Map(state.divisions.map((d) => [d.id, d.name]))
       const divisionCodeById = new Map(state.divisions.map((d) => [d.id, d.code]))
+      const clubCodeById = new Map(state.clubs.map((c) => [c.id, c.code || c.id]))
       ms = ms.filter((m) => {
         const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
         const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
@@ -194,7 +195,10 @@ export function ScoreEntryPage() {
           eventLabel(m),
           m.clubA,
           m.clubB,
+          clubCodeById.get(m.clubA) ?? '',
+          clubCodeById.get(m.clubB) ?? '',
           `${m.clubA} vs ${m.clubB}`,
+          `${clubCodeById.get(m.clubA) ?? m.clubA} vs ${clubCodeById.get(m.clubB) ?? m.clubB}`,
           aNames,
           bNames,
           `${aNames} | ${bNames}`,
@@ -236,8 +240,8 @@ export function ScoreEntryPage() {
 
   const divisionNameById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.name])), [state.divisions])
   const divisionCodeById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.code])), [state.divisions])
-  // Non-TV view uses acronyms (club ids) even if full names are configured for TV.
-  const clubLabel = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.id])), [state.clubs])
+  // Non-TV view uses club acronyms (codes) even if full names are configured for TV.
+  const clubLabel = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.code || c.id])), [state.clubs])
   const highlightNeedle = useMemo(() => quickSearch.trim(), [quickSearch])
 
   const sorted = useMemo(() => {
@@ -382,11 +386,11 @@ export function ScoreEntryPage() {
 
         const scoreHtml = `<div class="scoreBoxes">
   <div class="boxRow">
-    <span class="teamTag ${serveA ? 'serveFirst' : ''}">${escapeHtml(m.clubA)}</span>
+    <span class="teamTag ${serveA ? 'serveFirst' : ''}">${escapeHtml(clubLabel.get(m.clubA) ?? m.clubA)}</span>
     <span class="box">${scoreA === null ? '&nbsp;' : escapeHtml(String(scoreA))}</span>
   </div>
   <div class="boxRow">
-    <span class="teamTag ${!serveA ? 'serveFirst' : ''}">${escapeHtml(m.clubB)}</span>
+    <span class="teamTag ${!serveA ? 'serveFirst' : ''}">${escapeHtml(clubLabel.get(m.clubB) ?? m.clubB)}</span>
     <span class="box">${scoreB === null ? '&nbsp;' : escapeHtml(String(scoreB))}</span>
   </div>
 </div>`

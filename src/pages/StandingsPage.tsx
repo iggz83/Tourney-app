@@ -17,8 +17,11 @@ export function StandingsPage() {
   const coverage = useMemo(() => computeIndividualCoverage(state), [state])
   const namedPlayersCount = useMemo(() => state.players.filter(hasPlayerName).length, [state.players])
 
-  // Standings should use full club names (fallback to id).
-  const clubNameById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.name || c.id])), [state.clubs])
+  // Standings should use full club names (fallback to acronym).
+  const clubNameById = useMemo(
+    () => new Map(state.clubs.map((c) => [c.id, (c.name ?? '').trim() ? c.name : (c.code || c.id)])),
+    [state.clubs],
+  )
 
   const playerStandingByPlayerId = useMemo(
     () => new Map(playerStandings.map((row) => [row.playerId, row] as const)),
