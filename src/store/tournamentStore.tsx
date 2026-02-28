@@ -470,6 +470,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   // Tracks which tid the in-memory state currently corresponds to (for cloud hydration).
   // This prevents "load tournament" from incorrectly keeping the previous tournament's clubs/matches.
   const hydratedTidRef = useRef<string | null>(null)
+  // Tracks whether we've hydrated match rows for this tid at least once.
+  // This prevents a partially-hydrated client from pushing an empty schedule and wiping remote matches.
+  const hydratedMatchesTidRef = useRef<string | null>(null)
   const prevCoreSigRef = useRef<string | null>(null)
   const prevScheduleSigRef = useRef<string | null>(null)
   const prevScoresRef = useRef<Map<string, string>>(new Map())
@@ -529,6 +532,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       prevScheduleSigRef.current = null
       prevScoresRef.current = new Map()
       hydratedTidRef.current = null
+      hydratedMatchesTidRef.current = null
       setSyncError(null)
       setInFlight(0)
       setLastSyncedAt(null)
@@ -564,7 +568,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             }
             isApplyingRemote.current = true
             // Preserve current match scores (they come from match rows) but only after we've hydrated for this tid.
-            const safeMatches = hydratedTidRef.current === tid ? stateRef.current.matches : []
+            const safeMatches = hydratedMatchesTidRef.current === tid ? stateRef.current.matches : []
             const merged: TournamentStateV2 = { ...remote, matches: safeMatches }
             dispatch({ type: 'import', state: merged, source: 'remote' })
             hydratedTidRef.current = tid
@@ -580,6 +584,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             isApplyingRemote.current = true
             dispatch({ type: 'matches.upsert', match: m, source: 'remote' })
             hydratedTidRef.current = tid
+            hydratedMatchesTidRef.current = tid
             setLastSyncedAt(new Date().toISOString())
             setTimeout(() => {
               isApplyingRemote.current = false
@@ -589,6 +594,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
             isApplyingRemote.current = true
             dispatch({ type: 'match.delete', matchId, source: 'remote' })
             hydratedTidRef.current = tid
+            hydratedMatchesTidRef.current = tid
             setLastSyncedAt(new Date().toISOString())
             setTimeout(() => {
               isApplyingRemote.current = false
@@ -619,6 +625,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
           isApplyingRemote.current = true
           dispatch({ type: 'import', state: { ...chosenCore, tournamentName: chosenName, matches: chosenMatches }, source: 'remote' })
           hydratedTidRef.current = tid
+          hydratedMatchesTidRef.current = tid
           setLastSyncedAt(new Date().toISOString())
           setLastSyncedUpdatedAt(chosenCore.updatedAt ?? null)
           setTimeout(() => {
@@ -709,6 +716,9 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     }
 
     // Schedule updates (upsert all matches when schedule structure changes)
+    // CRITICAL: Don't push schedules/scores until we've hydrated match rows at least once for this tid.
+    // Otherwise realtime "core" events can mark the tid as hydrated while matches are still empty, causing a delete-all.
+    if (hydratedMatchesTidRef.current !== tid) return
     const schedSig = scheduleSignature(state.matches)
     if (prevScheduleSigRef.current !== schedSig) {
       prevScheduleSigRef.current = schedSig
