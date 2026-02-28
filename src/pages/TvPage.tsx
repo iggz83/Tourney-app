@@ -7,11 +7,16 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-function sameBoolRecord(a: Record<string, boolean>, b: Record<string, boolean>) {
+function sameNumRecord(a: Record<string, number>, b: Record<string, number>, eps = 0.025) {
   const ka = Object.keys(a)
   const kb = Object.keys(b)
   if (ka.length !== kb.length) return false
-  for (const k of ka) if (a[k] !== b[k]) return false
+  for (const k of ka) {
+    const av = a[k]
+    const bv = b[k]
+    if (av === undefined || bv === undefined) return false
+    if (Math.abs(av - bv) > eps) return false
+  }
   return true
 }
 
@@ -37,7 +42,7 @@ export function TvPage() {
   const isMeasuringRef = useRef<boolean>(false)
   const rafRef = useRef<number | null>(null)
   const debounceRef = useRef<number | null>(null)
-  const [useAcronymByClubId, setUseAcronymByClubId] = useState<Record<string, boolean>>({})
+  const [nameScaleByClubId, setNameScaleByClubId] = useState<Record<string, number>>({})
 
   // Make names more readable from far away by scaling them up slightly
   // while keeping stats a bit tighter.
@@ -56,23 +61,26 @@ export function TvPage() {
       }, 90)
     }
 
-    const measureNameOverflow = () => {
+    const measureNameScale = () => {
       const nodes = el.querySelectorAll<HTMLElement>('[data-role="club-name-cell"][data-club-id]')
-      const next: Record<string, boolean> = {}
+      const next: Record<string, number> = {}
       nodes.forEach((cell) => {
         const clubId = cell.getAttribute('data-club-id') || ''
         if (!clubId) return
         const full = cell.querySelector<HTMLElement>('[data-role="club-fullname-measure"]')
         if (!full) return
-        const txt = (full.textContent ?? '').trim()
-        const code = clubCodeById.get(clubId) ?? clubId
-        if (!txt.length || txt === clubId || txt === code) return
         const containerW = cell.clientWidth
         const fullW = full.offsetWidth
-        const over = fullW > containerW + 1
-        next[clubId] = over
+        if (containerW <= 0 || fullW <= 0) {
+          next[clubId] = 1
+          return
+        }
+        // Fit longer team names by shrinking just the name text (single line).
+        // Clamp so names don't become unreadably tiny.
+        const ratio = (containerW - 2) / fullW
+        next[clubId] = clamp(ratio, 0.62, 1)
       })
-      setUseAcronymByClubId((prev) => (sameBoolRecord(prev, next) ? prev : next))
+      setNameScaleByClubId((prev) => (sameNumRecord(prev, next) ? prev : next))
     }
 
     const measure = () => {
@@ -98,8 +106,8 @@ export function TvPage() {
           setBasePx(next)
         }
 
-        // After basePx is applied, determine whether any club full names would be truncated.
-        requestAnimationFrame(() => measureNameOverflow())
+        // After basePx is applied, compute per-team name scaling to avoid truncation.
+        requestAnimationFrame(() => measureNameScale())
       } finally {
         isMeasuringRef.current = false
       }
@@ -118,7 +126,7 @@ export function TvPage() {
       if (debounceRef.current) window.clearTimeout(debounceRef.current)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [clubStandings.length])
+  }, [clubStandings.length, state.clubs])
 
   return (
     <div className="h-full overflow-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-4">
@@ -173,12 +181,16 @@ export function TvPage() {
                     )}
                   </div>
                   <div className="min-w-0 relative" data-role="club-name-cell" data-club-id={row.clubId}>
-                    <div className="truncate font-black tracking-wide" style={{ fontSize: `${basePx * NAME_SCALE}px`, lineHeight: 1.05 }}>
-                      {useAcronymByClubId[row.clubId]
-                        ? (clubCodeById.get(row.clubId) ?? row.clubId)
-                        : (clubNameById.get(row.clubId) ?? clubCodeById.get(row.clubId) ?? row.clubId)}
+                    <div
+                      className="truncate font-black tracking-wide"
+                      style={{
+                        fontSize: `${basePx * NAME_SCALE * (nameScaleByClubId[row.clubId] ?? 1)}px`,
+                        lineHeight: 1.05,
+                      }}
+                    >
+                      {clubNameById.get(row.clubId) ?? clubCodeById.get(row.clubId) ?? row.clubId}
                     </div>
-                    {/* Hidden measure span: always full name, used to decide whether to fall back to acronym */}
+                    {/* Hidden measure span: unscaled, used to compute the shrink ratio */}
                     <span
                       className="absolute -z-10 invisible whitespace-nowrap font-black tracking-wide"
                       style={{ fontSize: `${basePx * NAME_SCALE}px`, lineHeight: 1.05 }}
