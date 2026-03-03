@@ -283,8 +283,11 @@ export async function upsertTournamentMatches(tid: string, matches: Match[]): Pr
   // That can cause realtime DELETE events to race/arrive out-of-order and wipe rows that were just reinserted.
   // Instead: upsert desired rows, then delete only rows that are no longer present.
   if (matches.length === 0) {
-    // Safety: never interpret an empty payload as "delete everything".
-    // A stale / partially-hydrated client could otherwise wipe a fully-populated remote schedule.
+    // Delete-all is intentional in some flows (e.g. user deletes all matches via UI).
+    // Stale/partially-hydrated client protection is handled at a higher layer (we block schedule pushes
+    // until match rows have hydrated at least once for this tid).
+    const { error: delAllErr } = await supabase.from('tournament_matches').delete().eq('tournament_id', tid)
+    if (delAllErr) throw delAllErr
     return
   }
 

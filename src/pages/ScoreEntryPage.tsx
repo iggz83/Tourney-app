@@ -3,6 +3,7 @@ import { SEEDED_EVENTS } from '../domain/constants'
 import { computeMatch } from '../domain/analytics'
 import { getPlayerName, getPlayerNameOr } from '../domain/playerName'
 import { getDivisionConfig, getPlayersById, getMatchPlayerIdsForClub } from '../domain/selectors'
+import { makeMatchId } from '../domain/scheduler'
 import type { Match, TournamentStateV2 } from '../domain/types'
 import { useTournamentStore } from '../store/useTournamentStore'
 
@@ -103,7 +104,7 @@ function highlightText(text: string, needleRaw: string) {
 }
 
 export function ScoreEntryPage() {
-  const { state, actions } = useTournamentStore()
+  const { state, actions, dispatch } = useTournamentStore()
   const [divisionId, setDivisionId] = useState<string>('all')
   const [round, setRound] = useState<'all' | string>('all')
   const [eventFilters, setEventFilters] = useState<string[]>([])
@@ -325,6 +326,56 @@ export function ScoreEntryPage() {
     const visible = new Set(sorted.map((m) => m.id))
     return Object.keys(drafts).filter((id) => visible.has(id))
   }, [drafts, sorted])
+
+  // Manual match UI (Add match)
+  const [addMatchOpen, setAddMatchOpen] = useState<boolean>(false)
+  const maxExistingRound = useMemo(() => {
+    let max = 1
+    for (const m of state.matches) max = Math.max(max, Number(m.round) || 0)
+    return max || 1
+  }, [state.matches])
+  const [addDivisionId, setAddDivisionId] = useState<string>('')
+  const [addRound, setAddRound] = useState<string>('')
+  const [addClubA, setAddClubA] = useState<string>('')
+  const [addClubB, setAddClubB] = useState<string>('')
+  const [addA1, setAddA1] = useState<string>('')
+  const [addA2, setAddA2] = useState<string>('')
+  const [addB1, setAddB1] = useState<string>('')
+  const [addB2, setAddB2] = useState<string>('')
+
+  useEffect(() => {
+    if (!addMatchOpen) return
+    const div = divisionId !== 'all' ? divisionId : state.divisions[0]?.id ?? ''
+    const a = state.clubs[0]?.id ?? ''
+    const b = state.clubs[1]?.id ?? a
+    setAddDivisionId(div)
+    setAddRound(String(maxExistingRound))
+    setAddClubA(a)
+    setAddClubB(b)
+    setAddA1('')
+    setAddA2('')
+    setAddB1('')
+    setAddB2('')
+  }, [addMatchOpen, divisionId, maxExistingRound, state.clubs, state.divisions])
+
+  const addPlayersForClub = useMemo(() => {
+    const byClub = new Map<string, Array<(typeof state.players)[number]>>()
+    if (!addDivisionId) return byClub
+    for (const p of state.players) {
+      if (p.divisionId !== addDivisionId) continue
+      const arr = byClub.get(p.clubId) ?? []
+      arr.push(p)
+      byClub.set(p.clubId, arr)
+    }
+    for (const [k, arr] of byClub) {
+      arr.sort((x, y) => {
+        if (x.gender !== y.gender) return x.gender === 'F' ? -1 : 1
+        return x.id.localeCompare(y.id)
+      })
+      byClub.set(k, arr)
+    }
+    return byClub
+  }, [addDivisionId, state.players])
 
   // Close the Event dropdown when clicking outside (or pressing Escape).
   useEffect(() => {
@@ -779,6 +830,17 @@ export function ScoreEntryPage() {
           </button>
           <button
             className={[
+              'rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900',
+              tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
+            ].join(' ')}
+            disabled={tournamentLocked}
+            onClick={() => setAddMatchOpen(true)}
+            title="Manually add a match (counts in standings/player stats)"
+          >
+            Add match
+          </button>
+          <button
+            className={[
               'rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40',
               tournamentLocked ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
             ].join(' ')}
@@ -830,6 +892,281 @@ export function ScoreEntryPage() {
           </button>
         </div>
       </div>
+
+      {addMatchOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-100">Add Match</div>
+                <div className="text-xs text-slate-400">Adds one manual game (counts in standings/player stats).</div>
+              </div>
+              <button
+                className="rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-900 hover:text-white"
+                onClick={() => setAddMatchOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="text-sm text-slate-300">
+                  <div className="mb-1 text-xs text-slate-400">Division</div>
+                  <select
+                    className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+                    value={addDivisionId}
+                    onChange={(e) => {
+                      setAddDivisionId(e.target.value)
+                      setAddA1('')
+                      setAddA2('')
+                      setAddB1('')
+                      setAddB2('')
+                    }}
+                  >
+                    {state.divisions.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-300">
+                  <div className="mb-1 text-xs text-slate-400">Round</div>
+                  <input
+                    inputMode="numeric"
+                    className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-500"
+                    value={addRound}
+                    onChange={(e) => setAddRound(e.target.value)}
+                  />
+                </label>
+
+                <div className="flex items-end text-xs text-slate-500">Default: current max round ({maxExistingRound}).</div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-sm text-slate-300">
+                  <div className="mb-1 text-xs text-slate-400">Team 1</div>
+                  <select
+                    className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+                    value={addClubA}
+                    onChange={(e) => {
+                      setAddClubA(e.target.value)
+                      setAddA1('')
+                      setAddA2('')
+                    }}
+                  >
+                    {state.clubs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {clubLabel.get(c.id) ?? c.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-sm text-slate-300">
+                  <div className="mb-1 text-xs text-slate-400">Team 2</div>
+                  <select
+                    className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+                    value={addClubB}
+                    onChange={(e) => {
+                      setAddClubB(e.target.value)
+                      setAddB1('')
+                      setAddB2('')
+                    }}
+                  >
+                    {state.clubs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {clubLabel.get(c.id) ?? c.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="mb-2 text-sm font-semibold text-slate-100">Team 1 players</div>
+                  <div className="grid gap-2">
+                    <select
+                      className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+                      value={addA1}
+                      onChange={(e) => setAddA1(e.target.value)}
+                    >
+                      <option value="">Select player 1…</option>
+                      {(addPlayersForClub.get(addClubA) ?? []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {displayPlayerName(p)} ({p.gender})
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+                      value={addA2}
+                      onChange={(e) => setAddA2(e.target.value)}
+                    >
+                      <option value="">Select player 2…</option>
+                      {(addPlayersForClub.get(addClubA) ?? []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {displayPlayerName(p)} ({p.gender})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="mb-2 text-sm font-semibold text-slate-100">Team 2 players</div>
+                  <div className="grid gap-2">
+                    <select
+                      className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+                      value={addB1}
+                      onChange={(e) => setAddB1(e.target.value)}
+                    >
+                      <option value="">Select player 1…</option>
+                      {(addPlayersForClub.get(addClubB) ?? []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {displayPlayerName(p)} ({p.gender})
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
+                      value={addB2}
+                      onChange={(e) => setAddB2(e.target.value)}
+                    >
+                      <option value="">Select player 2…</option>
+                      {(addPlayersForClub.get(addClubB) ?? []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {displayPlayerName(p)} ({p.gender})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+                  onClick={() => setAddMatchOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
+                  onClick={() => {
+                    if (tournamentLocked) return
+                    const divId = addDivisionId.trim()
+                    if (!divId.length) {
+                      alert('Please select a division.')
+                      return
+                    }
+                    const roundNum = Math.max(1, Math.floor(Number(addRound) || 0))
+                    if (!Number.isFinite(roundNum) || roundNum <= 0) {
+                      alert('Round must be a positive number.')
+                      return
+                    }
+                    const clubA = addClubA.trim()
+                    const clubB = addClubB.trim()
+                    if (!clubA || !clubB) {
+                      alert('Please select two teams.')
+                      return
+                    }
+                    if (clubA === clubB) {
+                      alert('Teams must be different.')
+                      return
+                    }
+                    const aAny = Boolean(addA1 || addA2)
+                    const bAny = Boolean(addB1 || addB2)
+
+                    // Players are optional, but to keep stats consistent we only allow:
+                    // - no players for both teams, OR
+                    // - exactly 2 players for both teams.
+                    if (aAny || bAny) {
+                      if (!(addA1 && addA2 && addB1 && addB2)) {
+                        alert('Either leave ALL players blank, or select 2 players for BOTH teams.')
+                        return
+                      }
+                      if (addA1 === addA2 || addB1 === addB2) {
+                        alert('A team cannot use the same player twice.')
+                        return
+                      }
+                    }
+
+                    const playersByIdLocal = new Map(state.players.map((p) => [p.id, p] as const))
+                    const pa1 = addA1 ? playersByIdLocal.get(addA1) : undefined
+                    const pa2 = addA2 ? playersByIdLocal.get(addA2) : undefined
+                    const pb1 = addB1 ? playersByIdLocal.get(addB1) : undefined
+                    const pb2 = addB2 ? playersByIdLocal.get(addB2) : undefined
+
+                    let eventType: Match['eventType'] = 'MIXED_DOUBLES'
+                    if (pa1 && pa2 && pb1 && pb2) {
+                      const all = [pa1, pa2, pb1, pb2]
+                      if (all.some((p) => p.divisionId !== divId)) {
+                        alert('All selected players must be in the chosen division.')
+                        return
+                      }
+                      if (pa1.clubId !== clubA || pa2.clubId !== clubA || pb1.clubId !== clubB || pb2.clubId !== clubB) {
+                        alert('Selected players must belong to their chosen teams.')
+                        return
+                      }
+
+                      const aG = [pa1.gender, pa2.gender]
+                      const bG = [pb1.gender, pb2.gender]
+                      const isAll = (gs: Array<'M' | 'F'>, g: 'M' | 'F') => gs.every((x) => x === g)
+                      if (isAll(aG, 'F') && isAll(bG, 'F')) eventType = 'WOMENS_DOUBLES'
+                      else if (isAll(aG, 'M') && isAll(bG, 'M')) eventType = 'MENS_DOUBLES'
+                      else {
+                        const okMixed = (gs: Array<'M' | 'F'>) => gs.includes('F') && gs.includes('M')
+                        if (!okMixed(aG) || !okMixed(bG)) {
+                          alert('Mixed doubles requires 1 woman and 1 man on each team.')
+                          return
+                        }
+                        eventType = 'MIXED_DOUBLES'
+                      }
+                    }
+
+                    const maxSeed = Math.max(
+                      0,
+                      ...state.matches.filter((m) => m.divisionId === divId && m.eventType === eventType).map((m) => Number(m.seed) || 0),
+                    )
+                    const seed = maxSeed + 1
+
+                    const maxMatchupIndex = Math.max(
+                      -1,
+                      ...state.matches.filter((m) => m.divisionId === divId && m.round === roundNum).map((m) => Number(m.matchupIndex) || 0),
+                    )
+                    const matchupIndex = maxMatchupIndex + 1
+
+                    // Store the chosen lineups via a new seed mapping just for this manual match.
+                    actions.setSeed(divId, clubA, eventType, seed, [pa1?.id ?? null, pa2?.id ?? null])
+                    actions.setSeed(divId, clubB, eventType, seed, [pb1?.id ?? null, pb2?.id ?? null])
+
+                    const id = makeMatchId({ divisionId: divId, clubA, clubB, eventType, seed })
+                    const newMatch: Match = {
+                      id,
+                      divisionId: divId,
+                      round: roundNum,
+                      matchupIndex,
+                      eventType,
+                      seed,
+                      court: 0,
+                      clubA,
+                      clubB,
+                      stage: 'REGULAR',
+                    }
+                    dispatch({ type: 'matches.upsert', match: newMatch, source: 'local' })
+                    setAddMatchOpen(false)
+                  }}
+                >
+                  Add match
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1228,6 +1565,23 @@ export function ScoreEntryPage() {
                       }}
                     >
                       Reset
+                    </button>
+                  )}
+                  {tournamentLocked ? null : (
+                    <button
+                      className="rounded-md px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-950/40"
+                      title="Delete match"
+                      onClick={() => {
+                        if (!confirm(`Delete this match?\n\n${rowId}\n\nThis will remove it completely.`)) return
+                        actions.deleteMatches([m.id])
+                        setDrafts((prev) => {
+                          const next = { ...prev }
+                          delete next[m.id]
+                          return next
+                        })
+                      }}
+                    >
+                      X
                     </button>
                   )}
                 </div>
