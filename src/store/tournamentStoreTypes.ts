@@ -14,8 +14,24 @@ export type TournamentStoreAction =
   | { type: 'club.remove'; clubId: ClubId }
   | { type: 'club.name.set'; clubId: ClubId; name: string }
   | { type: 'club.code.set'; clubId: ClubId; code: string }
+  | { type: 'division.add'; division: { id: string; code: string; name: string } }
+  | { type: 'division.update'; divisionId: string; code?: string; name?: string }
+  | { type: 'division.delete'; divisionId: string }
+  | { type: 'lineup.profile.add'; profileId: string; name: string; baseProfileId?: string }
+  | { type: 'lineup.profile.rename'; profileId: string; name: string }
+  | { type: 'lineup.profile.delete'; profileId: string }
+  | { type: 'lineup.profile.default.set'; profileId: string }
+  | { type: 'player.add'; divisionId: string; clubId: ClubId; gender: 'M' | 'F' }
+  | { type: 'player.remove'; playerId: PlayerId }
   | { type: 'player.name.set'; playerId: PlayerId; name: string }
-  | { type: 'division.autoseed'; divisionId: string; clubId?: ClubId }
+  | { type: 'seeded.events.set'; divisionId: string; seededEvents: TournamentStateV2['seededEvents'] }
+  | {
+      type: 'event.scheduleMode.set'
+      divisionId: string
+      eventType: EventType
+      mode: TournamentStateV2['eventScheduleModes'][EventType]
+    }
+  | { type: 'division.autoseed'; divisionId: string; clubId?: ClubId; profileId?: string }
   | { type: 'division.club.enabled.set'; divisionId: string; clubId: ClubId; enabled: boolean }
   | {
       type: 'division.seed.set'
@@ -24,6 +40,7 @@ export type TournamentStoreAction =
       eventType: EventType
       seed: number
       playerIds: [PlayerId | null, PlayerId | null]
+      profileId?: string
     }
   | { type: 'schedule.generate' }
   | { type: 'schedule.regenerate' }
@@ -66,9 +83,24 @@ export type TournamentStore = {
     removeClub(clubId: ClubId): void
     setClubName(clubId: ClubId, name: string): void
     setClubCode(clubId: ClubId, code: string): void
+    addDivision(division: { id: string; code: string; name: string }): void
+    updateDivision(divisionId: string, patch: { code?: string; name?: string }): void
+    deleteDivision(divisionId: string): void
+    addLineupProfile(profileId: string, name: string, baseProfileId?: string): void
+    renameLineupProfile(profileId: string, name: string): void
+    deleteLineupProfile(profileId: string): void
+    setDefaultLineupProfile(profileId: string): void
     setDivisionClubEnabled(divisionId: string, clubId: ClubId, enabled: boolean): void
+    addPlayer(divisionId: string, clubId: ClubId, gender: 'M' | 'F'): void
+    removePlayer(playerId: PlayerId): void
     setPlayerName(playerId: PlayerId, name: string): void
-    autoSeed(divisionId: string, clubId?: ClubId): void
+    setSeededEvents(divisionId: string, seededEvents: TournamentStateV2['seededEvents']): void
+    setEventScheduleMode(
+      divisionId: string,
+      eventType: EventType,
+      mode: TournamentStateV2['eventScheduleModes'][EventType],
+    ): void
+    autoSeed(divisionId: string, clubId?: ClubId, profileId?: string): void
     unlockMatch(matchId: MatchId): void
     clearAllScores(): void
     setSeed(
@@ -77,6 +109,7 @@ export type TournamentStore = {
       eventType: EventType,
       seed: number,
       playerIds: [PlayerId | null, PlayerId | null],
+      profileId?: string,
     ): void
     generateSchedule(): void
     regenerateSchedule(): void

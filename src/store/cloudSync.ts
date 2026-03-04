@@ -210,6 +210,18 @@ type MatchRow = {
   updated_at: string
 }
 
+function parseSeedPairFromMatchId(matchId: string, fallbackSeed: number): { seedA: number; seedB: number } {
+  const seed = Math.max(1, Math.floor(Number(fallbackSeed) || 1))
+  const m = /:sa(\d+):sb(\d+):/.exec(matchId)
+  if (m) {
+    return {
+      seedA: Math.max(1, Math.floor(Number(m[1]) || seed)),
+      seedB: Math.max(1, Math.floor(Number(m[2]) || seed)),
+    }
+  }
+  return { seedA: seed, seedB: seed }
+}
+
 export async function fetchTournamentMatches(tid: string): Promise<Match[]> {
   if (!supabase) throw new Error('Supabase not configured')
   const first = await supabase
@@ -231,13 +243,16 @@ export async function fetchTournamentMatches(tid: string): Promise<Match[]> {
       const rows = (fallback.data ?? []) as MatchRow[]
       return rows.map((r) => {
         const score = r.score_a == null || r.score_b == null ? undefined : { a: r.score_a, b: r.score_b }
+        const pair = parseSeedPairFromMatchId(r.match_id, r.seed)
         return {
           id: r.match_id,
           divisionId: r.division_id,
           round: r.round,
           matchupIndex: r.matchup_index,
           eventType: r.event_type as Match['eventType'],
-          seed: r.seed,
+          seed: pair.seedA,
+          seedA: pair.seedA,
+          seedB: pair.seedB,
           court: r.court,
           stage: 'REGULAR',
           clubA: r.club_a as Match['clubA'],
@@ -253,13 +268,16 @@ export async function fetchTournamentMatches(tid: string): Promise<Match[]> {
   const rows = (first.data ?? []) as MatchRow[]
   return rows.map((r) => {
     const score = r.score_a == null || r.score_b == null ? undefined : { a: r.score_a, b: r.score_b }
+    const pair = parseSeedPairFromMatchId(r.match_id, r.seed)
     return {
       id: r.match_id,
       divisionId: r.division_id,
       round: r.round,
       matchupIndex: r.matchup_index,
       eventType: r.event_type as Match['eventType'],
-      seed: r.seed,
+      seed: pair.seedA,
+      seedA: pair.seedA,
+      seedB: pair.seedB,
       court: r.court,
       stage: r.stage === 'PLAYOFF' ? 'PLAYOFF' : 'REGULAR',
       clubA: r.club_a as Match['clubA'],
@@ -298,7 +316,7 @@ export async function upsertTournamentMatches(tid: string, matches: Match[]): Pr
     round: m.round,
     matchup_index: m.matchupIndex,
     event_type: m.eventType,
-    seed: m.seed,
+    seed: Math.max(1, Math.floor(Number(m.seedA ?? m.seed) || 1)),
     court: m.court,
     stage: m.stage ?? 'REGULAR',
     club_a: m.clubA,
@@ -411,13 +429,16 @@ export function connectCloudSync(args: {
           r.score_a == null || r.score_b == null || typeof r.score_a !== 'number' || typeof r.score_b !== 'number'
             ? undefined
             : { a: r.score_a, b: r.score_b }
+        const pair = parseSeedPairFromMatchId(String(r.match_id), Number(r.seed ?? 1))
         const m: Match = {
           id: r.match_id,
           divisionId: String(r.division_id ?? ''),
           round: Number(r.round ?? 1),
           matchupIndex: Number(r.matchup_index ?? 0),
           eventType: String(r.event_type ?? '') as Match['eventType'],
-          seed: Number(r.seed ?? 0),
+          seed: pair.seedA,
+          seedA: pair.seedA,
+          seedB: pair.seedB,
           court: Number(r.court ?? 0),
           stage: r.stage === 'PLAYOFF' ? 'PLAYOFF' : 'REGULAR',
           clubA: String(r.club_a ?? '') as Match['clubA'],

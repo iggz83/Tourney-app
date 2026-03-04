@@ -1,4 +1,4 @@
-import { SKILL_DIVISIONS } from '../domain/constants'
+import { SEEDED_EVENTS, SKILL_DIVISIONS } from '../domain/constants'
 import type { DivisionConfig, TournamentStateV2 } from '../domain/types'
 
 function createDefaultPlayers(): TournamentStateV2['players'] {
@@ -17,13 +17,29 @@ export function createInitialTournamentState(): TournamentStateV2 {
   const divisions = SKILL_DIVISIONS
   const players = createDefaultPlayers()
   const divisionConfigs = divisions.map((d) => createEmptyDivisionConfig(d.id))
+  const defaultProfileId = 'lp-default'
+  const seededEventsByDivision = Object.fromEntries(divisions.map((d) => [d.id, SEEDED_EVENTS])) as TournamentStateV2['seededEventsByDivision']
+  const defaultEventScheduleModes: TournamentStateV2['eventScheduleModes'] = {
+    WOMENS_DOUBLES: 'SAME_SEED',
+    MENS_DOUBLES: 'SAME_SEED',
+    MIXED_DOUBLES: 'SAME_SEED',
+  }
+  const eventScheduleModesByDivision = Object.fromEntries(
+    divisions.map((d) => [d.id, { ...defaultEventScheduleModes }]),
+  ) as TournamentStateV2['eventScheduleModesByDivision']
 
   return {
     version: 2,
     tournamentName: '',
     clubs: [],
     divisions,
+    seededEvents: SEEDED_EVENTS,
+    seededEventsByDivision,
+    eventScheduleModes: defaultEventScheduleModes,
+    eventScheduleModesByDivision,
     players,
+    lineupProfiles: [{ id: defaultProfileId, name: 'Default', divisionConfigs }],
+    defaultLineupProfileId: defaultProfileId,
     divisionConfigs,
     matches: [],
     tournamentLockedAt: null,

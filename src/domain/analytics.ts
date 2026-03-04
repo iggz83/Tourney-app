@@ -1,5 +1,5 @@
 import type { ClubId, Match, PlayerId, TournamentStateV2 } from './types'
-import { getDivisionConfig, getMatchPlayerIdsForClub } from './selectors'
+import { getMatchPlayerIdsForClub } from './selectors'
 
 export interface ClubStanding {
   clubId: ClubId
@@ -167,9 +167,8 @@ export function computePlayerStandings(state: TournamentStateV2): PlayerStanding
     const computed = computeMatch(match)
     if (!computed.winnerClubId) continue
 
-    const divisionConfig = getDivisionConfig(state, match.divisionId)
-    const aPlayers = getMatchPlayerIdsForClub({ match, clubId: match.clubA, divisionConfig })
-    const bPlayers = getMatchPlayerIdsForClub({ match, clubId: match.clubB, divisionConfig })
+    const aPlayers = getMatchPlayerIdsForClub({ state, match, clubId: match.clubA })
+    const bPlayers = getMatchPlayerIdsForClub({ state, match, clubId: match.clubB })
 
     const aIds = aPlayers ?? null
     const bIds = bPlayers ?? null
@@ -217,9 +216,8 @@ export function computeIndividualCoverage(state: TournamentStateV2): {
   for (const match of state.matches) {
     if (!match.score) continue
     scoredMatches++
-    const divisionConfig = getDivisionConfig(state, match.divisionId)
-    const aPlayers = getMatchPlayerIdsForClub({ match, clubId: match.clubA, divisionConfig })
-    const bPlayers = getMatchPlayerIdsForClub({ match, clubId: match.clubB, divisionConfig })
+    const aPlayers = getMatchPlayerIdsForClub({ state, match, clubId: match.clubA })
+    const bPlayers = getMatchPlayerIdsForClub({ state, match, clubId: match.clubB })
     if (aPlayers && bPlayers) scoredMatchesWithPlayerMapping++
   }
 

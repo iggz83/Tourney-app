@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { SEEDED_EVENTS } from '../domain/constants'
 import { computeMatch } from '../domain/analytics'
 import { getPlayerName, getPlayerNameOr } from '../domain/playerName'
-import { getDivisionConfig, getPlayersById, getMatchPlayerIdsForClub } from '../domain/selectors'
+import { getPlayersById, getMatchPlayerIdsForClub, getSeededEventsForDivision } from '../domain/selectors'
 import { makeMatchId } from '../domain/scheduler'
-import type { Match, TournamentStateV2 } from '../domain/types'
+import type { Match } from '../domain/types'
 import { useTournamentStore } from '../store/useTournamentStore'
 
 function displayPlayerName(p?: { name?: string | null; firstName?: string | null; lastName?: string | null }) {
   return getPlayerNameOr(p, '—')
 }
 
-function eventLabel(match: Match) {
-  return SEEDED_EVENTS.find((e) => e.eventType === match.eventType && e.seed === match.seed)?.label ?? `${match.eventType} #${match.seed}`
+function eventLabel(match: Match, seededEvents: Array<{ eventType: Match['eventType']; seed: number; label: string }>) {
+  const seedA = Math.max(1, Math.floor(Number(match.seedA ?? match.seed) || 1))
+  const seedB = Math.max(1, Math.floor(Number(match.seedB ?? match.seed) || 1))
+  const labelA = seededEvents.find((e) => e.eventType === match.eventType && e.seed === seedA)?.label ?? `${match.eventType} #${seedA}`
+  if (seedA === seedB) return labelA
+  const labelB = seededEvents.find((e) => e.eventType === match.eventType && e.seed === seedB)?.label ?? `#${seedB}`
+  return `${labelA} vs ${labelB}`
 }
 
 function byMatchOrder(a: Match, b: Match) {
@@ -26,7 +30,10 @@ function byMatchOrder(a: Match, b: Match) {
   }
   const eo = eventOrder(a) - eventOrder(b)
   if (eo !== 0) return eo
-  return a.seed - b.seed
+  const saA = Number(a.seedA ?? a.seed)
+  const saB = Number(b.seedA ?? b.seed)
+  if (saA !== saB) return saA - saB
+  return Number(a.seedB ?? a.seed) - Number(b.seedB ?? b.seed)
 }
 
 function parseScore(v: string): number | undefined {
@@ -124,6 +131,25 @@ export function ScoreEntryPage() {
   const hasPlayoffs = useMemo(() => state.matches.some((m) => (m.stage ?? 'REGULAR') === 'PLAYOFF'), [state.matches])
 
   const playersById = useMemo(() => getPlayersById(state), [state])
+  const eventOptions = useMemo(() => {
+    const all: Array<{ eventType: Match['eventType']; seed: number; label: string }> = []
+    const byKey = new Map<string, { eventType: Match['eventType']; seed: number; label: string }>()
+    for (const d of state.divisions) {
+      for (const ev of getSeededEventsForDivision(state, d.id)) {
+        const k = `${ev.eventType}:${ev.seed}`
+        if (byKey.has(k)) continue
+        byKey.set(k, ev)
+      }
+    }
+    all.push(...byKey.values())
+    all.sort((a, b) => {
+      const eo = (t: string) => (t === 'WOMENS_DOUBLES' ? 0 : t === 'MENS_DOUBLES' ? 1 : 2)
+      const d = eo(a.eventType) - eo(b.eventType)
+      if (d !== 0) return d
+      return a.seed - b.seed
+    })
+    return all
+  }, [state])
 
   const isNamedPlayer = useMemo(() => {
     return (playerId: string | undefined) => {
@@ -136,13 +162,12 @@ export function ScoreEntryPage() {
 
   const hasFullLineup = useMemo(() => {
     return (m: Match) => {
-      const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
-      const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
-      const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+      const aPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubA })
+      const bPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubB })
       if (!aPair || !bPair) return false
       return isNamedPlayer(aPair[0]) && isNamedPlayer(aPair[1]) && isNamedPlayer(bPair[0]) && isNamedPlayer(bPair[1])
     }
-  }, [isNamedPlayer, state.divisionConfigs])
+  }, [isNamedPlayer, state])
 
   const baseFiltered = useMemo(() => {
     let ms = state.matches
@@ -183,9 +208,8 @@ export function ScoreEntryPage() {
       const divisionCodeById = new Map(state.divisions.map((d) => [d.id, d.code]))
       const clubCodeById = new Map(state.clubs.map((c) => [c.id, c.code || c.id]))
       ms = ms.filter((m) => {
-        const divisionConfig = getDivisionConfig({ divisionConfigs: state.divisionConfigs } as TournamentStateV2, m.divisionId)
-        const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
-        const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+        const aPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubA })
+        const bPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubB })
         const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
         const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
         const hay = [
@@ -193,7 +217,7 @@ export function ScoreEntryPage() {
           divisionCodeById.get(m.divisionId) ?? '',
           String(m.round),
           String(m.court),
-          eventLabel(m),
+          eventLabel(m, getSeededEventsForDivision(state, m.divisionId)),
           m.clubA,
           m.clubB,
           clubCodeById.get(m.clubA) ?? '',
@@ -257,8 +281,8 @@ export function ScoreEntryPage() {
 
       const divCodeA = divisionCodeById.get(a.divisionId) ?? a.divisionId
       const divCodeB = divisionCodeById.get(b.divisionId) ?? b.divisionId
-      const evA = eventLabel(a)
-      const evB = eventLabel(b)
+      const evA = eventLabel(a, getSeededEventsForDivision(state, a.divisionId))
+      const evB = eventLabel(b, getSeededEventsForDivision(state, b.divisionId))
       const idA = `${divCodeA}-R${a.round}-C${a.court}-${evA.replace(/\s+/g, '')}`
       const idB = `${divCodeB}-R${b.round}-C${b.court}-${evB.replace(/\s+/g, '')}`
 
@@ -290,12 +314,10 @@ export function ScoreEntryPage() {
           break
         case 'players': {
           // Sort by the rendered players string (cheap + stable enough)
-          const divisionConfigA = getDivisionConfig(state as TournamentStateV2, a.divisionId)
-          const divisionConfigB = getDivisionConfig(state as TournamentStateV2, b.divisionId)
-          const aPairA = getMatchPlayerIdsForClub({ match: a, clubId: a.clubA, divisionConfig: divisionConfigA })
-          const bPairA = getMatchPlayerIdsForClub({ match: a, clubId: a.clubB, divisionConfig: divisionConfigA })
-          const aPairB = getMatchPlayerIdsForClub({ match: b, clubId: b.clubA, divisionConfig: divisionConfigB })
-          const bPairB = getMatchPlayerIdsForClub({ match: b, clubId: b.clubB, divisionConfig: divisionConfigB })
+          const aPairA = getMatchPlayerIdsForClub({ state, match: a, clubId: a.clubA })
+          const bPairA = getMatchPlayerIdsForClub({ state, match: a, clubId: a.clubB })
+          const aPairB = getMatchPlayerIdsForClub({ state, match: b, clubId: b.clubA })
+          const bPairB = getMatchPlayerIdsForClub({ state, match: b, clubId: b.clubB })
           const aNamesA = aPairA ? aPairA.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
           const bNamesA = bPairA ? bPairA.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
           const aNamesB = aPairB ? aPairB.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
@@ -409,17 +431,15 @@ export function ScoreEntryPage() {
     const roundLabel = round === 'all' ? 'All rounds' : `Round ${round}`
     const eventLabelFilter = (() => {
       if (!eventFilters.length) return 'All events'
-      const labels = eventFilters
-        .map((v) => SEEDED_EVENTS.find((ev) => `${ev.eventType}:${ev.seed}` === v)?.label ?? v)
-        .filter(Boolean)
+      const byKey = new Map<string, string>(eventOptions.map((ev) => [`${ev.eventType}:${ev.seed}`, ev.label]))
+      const labels = eventFilters.map((v) => byKey.get(v) ?? v).filter(Boolean)
       return labels.length ? labels.join(', ') : 'All events'
     })()
 
     const rowsHtml = sorted
       .map((m) => {
-        const divisionConfig = getDivisionConfig(state as TournamentStateV2, m.divisionId)
-        const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
-        const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+        const aPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubA })
+        const bPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubB })
         const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
         const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
 
@@ -432,7 +452,7 @@ export function ScoreEntryPage() {
           clubLabel.get(m.clubB) ?? m.clubB,
         )}</span>`
         const division = divisionNameById.get(m.divisionId) ?? m.divisionId
-        const event = eventLabel(m)
+        const event = eventLabel(m, getSeededEventsForDivision(state, m.divisionId))
         const players = `${aNames} | ${bNames}`
 
         const scoreHtml = `<div class="scoreBoxes">
@@ -691,7 +711,7 @@ export function ScoreEntryPage() {
       const b = parseScore(bRaw)
       if (a === undefined || b === undefined) {
         const divCode = divisionCodeById.get(m.divisionId) ?? m.divisionId
-        const evShort = eventLabel(m).replace(/\s+/g, '')
+        const evShort = eventLabel(m, getSeededEventsForDivision(state, m.divisionId)).replace(/\s+/g, '')
         const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
         errors.push(rowId)
         continue
@@ -867,6 +887,35 @@ export function ScoreEntryPage() {
             title="Removes unscored matches with missing players"
           >
             Delete games with missing players
+          </button>
+          <button
+            className={[
+              'rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40',
+              tournamentLocked || sorted.length === 0 ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
+            ].join(' ')}
+            disabled={tournamentLocked || sorted.length === 0}
+            onClick={() => {
+              if (sorted.length === 0) {
+                alert('No matches in the current filter.')
+                return
+              }
+              if (
+                !confirm(
+                  `Delete filtered matches?\n\nThis will permanently delete ${sorted.length} match(es) currently shown by your filters.\n\nContinue?`,
+                )
+              )
+                return
+              const ids = sorted.map((m) => m.id)
+              actions.deleteMatches(ids)
+              setDrafts((prev) => {
+                const next = { ...prev }
+                for (const id of ids) delete next[id]
+                return next
+              })
+            }}
+            title="Deletes all matches currently shown by the active filters"
+          >
+            Delete filtered ({sorted.length})
           </button>
           <button
             className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
@@ -1246,13 +1295,13 @@ export function ScoreEntryPage() {
                 {eventFilters.length === 0
                   ? 'All events'
                   : eventFilters.length === 1
-                    ? SEEDED_EVENTS.find((ev) => `${ev.eventType}:${ev.seed}` === eventFilters[0])?.label ?? eventFilters[0]
+                    ? eventOptions.find((ev) => `${ev.eventType}:${ev.seed}` === eventFilters[0])?.label ?? eventFilters[0]
                     : `${eventFilters.length} selected`}
                 <span className="float-right text-slate-400 group-open:rotate-180">▾</span>
               </summary>
               <div className="absolute z-20 mt-1 w-full min-w-[220px] rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
                 <div className="max-h-56 overflow-auto pr-1">
-                  {SEEDED_EVENTS.map((ev) => {
+                  {eventOptions.map((ev) => {
                     const v = `${ev.eventType}:${ev.seed}`
                     const checked = eventFilters.includes(v)
                     return (
@@ -1429,9 +1478,8 @@ export function ScoreEntryPage() {
           <div className="divide-y divide-slate-800 bg-slate-950/30">
           {sorted.map((m) => {
             const computed = computeMatch(m)
-            const divisionConfig = getDivisionConfig(state as TournamentStateV2, m.divisionId)
-            const aPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubA, divisionConfig })
-            const bPair = getMatchPlayerIdsForClub({ match: m, clubId: m.clubB, divisionConfig })
+            const aPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubA })
+            const bPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubB })
             const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
             const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
 
@@ -1444,11 +1492,11 @@ export function ScoreEntryPage() {
             const showB = locked ? (m.score?.b?.toString() ?? '') : draft.b
 
             const divCode = divisionCodeById.get(m.divisionId) ?? m.divisionId
-            const evShort = eventLabel(m).replace(/\s+/g, '')
+            const evShort = eventLabel(m, getSeededEventsForDivision(state, m.divisionId)).replace(/\s+/g, '')
             const rowId = `${divCode}-R${m.round}-C${m.court}-${evShort}`
 
             const divisionText = divisionNameById.get(m.divisionId) ?? m.divisionId
-            const eventText = eventLabel(m)
+            const eventText = eventLabel(m, getSeededEventsForDivision(state, m.divisionId))
             const clubAText = clubLabel.get(m.clubA) ?? m.clubA
             const clubBText = clubLabel.get(m.clubB) ?? m.clubB
             const playersText = `${aNames} | ${bNames}`

@@ -1,7 +1,8 @@
-import { SEEDED_EVENTS, SKILL_DIVISIONS } from '../domain/constants'
+import { SKILL_DIVISIONS } from '../domain/constants'
 import type { ClubId, EventType, PlayerId } from '../domain/types'
 import { seedKey } from '../domain/keys'
 import { getPlayerNameOr } from '../domain/playerName'
+import { getEventScheduleModesForDivision, getSeededEventsForDivision } from '../domain/selectors'
 import { hashTournamentPassword, makePasswordSaltHex, verifyTournamentPassword } from '../domain/password'
 import { useEffect, useMemo, useState } from 'react'
 import { useTournamentStore } from '../store/useTournamentStore'
@@ -27,15 +28,24 @@ function playerLabel(p: { name?: string | null; firstName?: string | null; lastN
   return getPlayerNameOr(p, '(unnamed)')
 }
 
-function rosterSlotLabel(p: { id: string; gender: 'M' | 'F' }) {
-  // Player ids are like: <divisionId>:<clubId>:W1 or ...:M4
-  const m = /:(W|M)(\d)$/.exec(p.id)
+function rosterSlotLabel(p: { id: string; gender: 'M' | 'F'; slotLabel?: string | null }) {
+  const slot = (p.slotLabel ?? '').trim()
+  if (slot) return slot
+  // Legacy ids are like: <divisionId>:<clubId>:W1 or ...:M4
+  const m = /:(W|M)(\d+)$/.exec(p.id)
   const n = m ? m[2] : p.id.slice(-1)
   const prefix = p.gender === 'F' ? 'W' : 'M'
   return `${prefix}${n}`
 }
 
-function rosterSortKey(p: { id: string; gender: 'M' | 'F' }) {
+function rosterSortKey(p: { id: string; gender: 'M' | 'F'; sortOrder?: number | null; slotLabel?: string | null }) {
+  if (typeof p.sortOrder === 'number' && Number.isFinite(p.sortOrder)) return p.sortOrder
+  const slot = (p.slotLabel ?? '').trim()
+  const m0 = /^(W|M)(\d+)$/.exec(slot)
+  if (m0) {
+    const num = Number(m0[2]) || 99
+    return (m0[1] === 'W' ? 0 : 1) * 1000 + num
+  }
   const m = /:(W|M)(\d)$/.exec(p.id)
   const n = m ? Number(m[2]) : Number(p.id.slice(-1))
   const num = Number.isFinite(n) ? n : 99
@@ -59,6 +69,7 @@ export function SetupPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState(state.divisions[0]?.id ?? SKILL_DIVISIONS[0].id)
   const [clubId, setClubId] = useState<ClubId>(state.clubs[0]?.id ?? '')
+  const [mappingProfileId, setMappingProfileId] = useState<string>(state.defaultLineupProfileId)
   const [importError, setImportError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [copiedTopPlayers, setCopiedTopPlayers] = useState(false)
@@ -68,6 +79,22 @@ export function SetupPage() {
   const [tournaments, setTournaments] = useState<TournamentListItem[]>([])
   const [newClubCode, setNewClubCode] = useState<string>('')
   const [newClubName, setNewClubName] = useState<string>('')
+  const [newDivisionCode, setNewDivisionCode] = useState<string>('')
+  const [newDivisionName, setNewDivisionName] = useState<string>('')
+  const seededEventsForDivision = useMemo(() => getSeededEventsForDivision(state, divisionId), [state, divisionId])
+  const eventModesForDivision = useMemo(() => getEventScheduleModesForDivision(state, divisionId), [state, divisionId])
+  const seededCounts = useMemo(() => {
+    const maxSeed = (eventType: EventType) =>
+      Math.max(0, ...seededEventsForDivision.filter((e) => e.eventType === eventType).map((e) => Number(e.seed) || 0))
+    return {
+      women: maxSeed('WOMENS_DOUBLES'),
+      men: maxSeed('MENS_DOUBLES'),
+      mixed: maxSeed('MIXED_DOUBLES'),
+    }
+  }, [seededEventsForDivision])
+  const [womenSeeds, setWomenSeeds] = useState<string>(String(seededCounts.women))
+  const [menSeeds, setMenSeeds] = useState<string>(String(seededCounts.men))
+  const [mixedSeeds, setMixedSeeds] = useState<string>(String(seededCounts.mixed))
   const [pwEditing, setPwEditing] = useState(false)
   const [pw1, setPw1] = useState('')
   const [pw2, setPw2] = useState('')
@@ -79,9 +106,21 @@ export function SetupPage() {
     [state.players, clubId, divisionId],
   )
 
+  const mappingProfile = useMemo(() => {
+    const direct = state.lineupProfiles.find((p) => p.id === mappingProfileId)
+    if (direct) return direct
+    const def = state.lineupProfiles.find((p) => p.id === state.defaultLineupProfileId)
+    return def ?? state.lineupProfiles[0]
+  }, [mappingProfileId, state.defaultLineupProfileId, state.lineupProfiles])
+
+  useEffect(() => {
+    if (state.lineupProfiles.some((p) => p.id === mappingProfileId)) return
+    setMappingProfileId(state.defaultLineupProfileId)
+  }, [mappingProfileId, state.defaultLineupProfileId, state.lineupProfiles])
+
   const divisionConfig = useMemo(
-    () => state.divisionConfigs.find((d) => d.divisionId === divisionId),
-    [state.divisionConfigs, divisionId],
+    () => mappingProfile?.divisionConfigs.find((d) => d.divisionId === divisionId),
+    [mappingProfile, divisionId],
   )
 
   const seedsForClub = divisionConfig?.seedsByClub?.[clubId]
@@ -89,11 +128,23 @@ export function SetupPage() {
   const tournamentLocked = Boolean(state.tournamentLockedAt)
   const tournamentName = state.tournamentName ?? ''
 
+  useEffect(() => {
+    setWomenSeeds(String(seededCounts.women))
+    setMenSeeds(String(seededCounts.men))
+    setMixedSeeds(String(seededCounts.mixed))
+  }, [seededCounts.men, seededCounts.mixed, seededCounts.women])
+
   // Keep selected club valid if clubs list changes (add/remove).
   useEffect(() => {
     if (clubId && state.clubs.some((c) => c.id === clubId)) return
     setClubId(state.clubs[0]?.id ?? '')
   }, [clubId, state.clubs])
+
+  // Keep selected division valid if divisions list changes (add/remove).
+  useEffect(() => {
+    if (divisionId && state.divisions.some((d) => d.id === divisionId)) return
+    setDivisionId(state.divisions[0]?.id ?? '')
+  }, [divisionId, state.divisions])
 
   const clubEnabledForDivision = (cid: ClubId) => (divisionConfig?.clubEnabled?.[cid] ?? true) !== false
 
@@ -697,11 +748,104 @@ export function SetupPage() {
       ) : null}
 
       <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">Divisions</h2>
+          <p className="text-sm text-slate-400">Add/edit/remove divisions for this tournament.</p>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/30">
+          <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+            <div className="col-span-3">Code</div>
+            <div className="col-span-8">Name</div>
+            <div className="col-span-1 text-right"> </div>
+          </div>
+          <div className="divide-y divide-slate-800">
+            {state.divisions.map((d) => (
+              <div key={d.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2">
+                <CommitInput
+                  className="col-span-3 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
+                  value={d.code ?? ''}
+                  onCommit={(next) => {
+                    if (tournamentLocked) return
+                    const code = next.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+                    actions.updateDivision(d.id, { code })
+                  }}
+                />
+                <CommitInput
+                  className="col-span-8 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
+                  value={d.name ?? ''}
+                  onCommit={(next) => {
+                    if (tournamentLocked) return
+                    actions.updateDivision(d.id, { name: next })
+                  }}
+                />
+                <div className="col-span-1 flex justify-end">
+                  <button
+                    className="rounded-md border border-red-900/60 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-950/40 disabled:opacity-50"
+                    disabled={tournamentLocked || state.divisions.length <= 1}
+                    title={state.divisions.length <= 1 ? 'Must keep at least one division' : 'Delete division'}
+                    onClick={() => {
+                      if (state.divisions.length <= 1) return
+                      if (
+                        !confirm(
+                          `Delete division ${d.name}?\n\nThis will remove:\n- All players in this division\n- All matches in this division\n- All mapping configs for this division\n\nContinue?`,
+                        )
+                      )
+                        return
+                      actions.deleteDivision(d.id)
+                    }}
+                  >
+                    X
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
+          <div className="mb-2 text-sm font-semibold text-slate-100">Add division</div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <input
+              className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
+              placeholder="Code (e.g. 35PLUS)"
+              value={newDivisionCode}
+              onChange={(e) => setNewDivisionCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+              disabled={tournamentLocked}
+            />
+            <input
+              className="rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
+              placeholder="Name (e.g. 3.5+)"
+              value={newDivisionName}
+              onChange={(e) => setNewDivisionName(e.target.value)}
+              disabled={tournamentLocked}
+            />
+            <button
+              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
+              disabled={tournamentLocked || !newDivisionName.trim().length}
+              onClick={() => {
+                const name = newDivisionName.trim()
+                if (!name) return
+                const code = newDivisionCode.trim()
+                const id = `d:${crypto.randomUUID()}`
+                actions.addDivision({ id, code, name })
+                setNewDivisionCode('')
+                setNewDivisionName('')
+                setDivisionId(id)
+              }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Club Rosters</h2>
             <p className="text-sm text-slate-400">
-              8 per club <span className="text-slate-500">(per division)</span> — 4 women, 4 men. Names are editable.
+              Add as many women/men as you need per club <span className="text-slate-500">(per division)</span>.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -740,6 +884,24 @@ export function SetupPage() {
                 <div className="mb-3 flex items-center justify-between">
                   <div className="text-sm font-semibold">{club.name}</div>
                   <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="rounded-md border border-slate-700 bg-slate-950/30 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                        disabled={tournamentLocked}
+                        onClick={() => actions.addPlayer(divisionId, club.id, 'F')}
+                        title="Add a woman to this roster"
+                      >
+                        +W
+                      </button>
+                      <button
+                        className="rounded-md border border-slate-700 bg-slate-950/30 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                        disabled={tournamentLocked}
+                        onClick={() => actions.addPlayer(divisionId, club.id, 'M')}
+                        title="Add a man to this roster"
+                      >
+                        +M
+                      </button>
+                    </div>
                     <label className="flex items-center gap-2 text-xs text-slate-300">
                       <input
                         type="checkbox"
@@ -766,11 +928,22 @@ export function SetupPage() {
                         {p.gender}
                       </div>
                       <CommitInput
-                        className="col-span-10 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
+                        className="col-span-9 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600"
                         placeholder="Player name"
                         value={p.name ?? ''}
                         onCommit={(next) => actions.setPlayerName(p.id, next)}
                       />
+                      <button
+                        className="col-span-1 rounded-md border border-red-900/60 bg-red-950/20 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-950/40 disabled:opacity-50"
+                        disabled={tournamentLocked}
+                        title="Remove player"
+                        onClick={() => {
+                          if (!confirm(`Remove player ${rosterSlotLabel(p)}?\n\nThis also clears any seed mappings that reference them.`)) return
+                          actions.removePlayer(p.id)
+                        }}
+                      >
+                        X
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -782,15 +955,165 @@ export function SetupPage() {
       </section>
 
       <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">Events</h2>
+          <p className="text-sm text-slate-400">Configure seeded events and match format for this tournament.</p>
+        </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="text-sm text-slate-300">
+              <div className="mb-1 text-xs text-slate-400">Women seeds</div>
+              <input
+                inputMode="numeric"
+                className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
+                value={womenSeeds}
+                disabled={tournamentLocked}
+                onChange={(e) => setWomenSeeds(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+              />
+            </label>
+            <label className="text-sm text-slate-300">
+              <div className="mb-1 text-xs text-slate-400">Men seeds</div>
+              <input
+                inputMode="numeric"
+                className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
+                value={menSeeds}
+                disabled={tournamentLocked}
+                onChange={(e) => setMenSeeds(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+              />
+            </label>
+            <label className="text-sm text-slate-300">
+              <div className="mb-1 text-xs text-slate-400">Mixed seeds</div>
+              <input
+                inputMode="numeric"
+                className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
+                value={mixedSeeds}
+                disabled={tournamentLocked}
+                onChange={(e) => setMixedSeeds(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <label className="text-sm text-slate-300">
+              <div className="mb-1 text-xs text-slate-400">Women format</div>
+              <select
+                className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 disabled:opacity-50"
+                value={eventModesForDivision.WOMENS_DOUBLES}
+                disabled={tournamentLocked}
+                onChange={(e) =>
+                  actions.setEventScheduleMode(
+                    divisionId,
+                    'WOMENS_DOUBLES',
+                    e.target.value === 'ALL_VS_ALL' ? 'ALL_VS_ALL' : 'SAME_SEED',
+                  )
+                }
+              >
+                <option value="SAME_SEED">Same seed only (W1 vs W1)</option>
+                <option value="ALL_VS_ALL">All seeds vs all seeds</option>
+              </select>
+            </label>
+            <label className="text-sm text-slate-300">
+              <div className="mb-1 text-xs text-slate-400">Men format</div>
+              <select
+                className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 disabled:opacity-50"
+                value={eventModesForDivision.MENS_DOUBLES}
+                disabled={tournamentLocked}
+                onChange={(e) =>
+                  actions.setEventScheduleMode(
+                    divisionId,
+                    'MENS_DOUBLES',
+                    e.target.value === 'ALL_VS_ALL' ? 'ALL_VS_ALL' : 'SAME_SEED',
+                  )
+                }
+              >
+                <option value="SAME_SEED">Same seed only (M1 vs M1)</option>
+                <option value="ALL_VS_ALL">All seeds vs all seeds</option>
+              </select>
+            </label>
+            <label className="text-sm text-slate-300">
+              <div className="mb-1 text-xs text-slate-400">Mixed format</div>
+              <select
+                className="w-full rounded-md border border-slate-800 bg-slate-950/40 px-2 py-2 text-sm text-slate-100 disabled:opacity-50"
+                value={eventModesForDivision.MIXED_DOUBLES}
+                disabled={tournamentLocked}
+                onChange={(e) =>
+                  actions.setEventScheduleMode(
+                    divisionId,
+                    'MIXED_DOUBLES',
+                    e.target.value === 'ALL_VS_ALL' ? 'ALL_VS_ALL' : 'SAME_SEED',
+                  )
+                }
+              >
+                <option value="SAME_SEED">Same seed only (X1 vs X1)</option>
+                <option value="ALL_VS_ALL">All seeds vs all seeds</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-slate-500">
+              Changing events/formats does not change existing matches. Regenerate the schedule if you want new settings applied.
+            </div>
+            <button
+              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700 disabled:opacity-50"
+              disabled={tournamentLocked}
+              onClick={() => {
+                const w = Math.max(0, Math.floor(Number(womenSeeds) || 0))
+                const m = Math.max(0, Math.floor(Number(menSeeds) || 0))
+                const x = Math.max(0, Math.floor(Number(mixedSeeds) || 0))
+                const next: typeof seededEventsForDivision = []
+                for (let i = 1; i <= w; i++) next.push({ eventType: 'WOMENS_DOUBLES', seed: i, label: `Women #${i}` })
+                for (let i = 1; i <= m; i++) next.push({ eventType: 'MENS_DOUBLES', seed: i, label: `Men #${i}` })
+                for (let i = 1; i <= x; i++) next.push({ eventType: 'MIXED_DOUBLES', seed: i, label: `Mixed #${i}` })
+
+                // Safety: preserve any event/seed already referenced by existing matches.
+                const byKey = new Map<string, (typeof next)[number]>(next.map((ev) => [`${ev.eventType}:${ev.seed}`, ev]))
+                const labelByKey = new Map<string, string>(seededEventsForDivision.map((ev) => [`${ev.eventType}:${ev.seed}`, ev.label]))
+                for (const match of state.matches.filter((m) => m.divisionId === divisionId)) {
+                  const k = `${match.eventType}:${match.seed}`
+                  if (byKey.has(k)) continue
+                  byKey.set(k, {
+                    eventType: match.eventType,
+                    seed: match.seed,
+                    label: labelByKey.get(k) ?? `${match.eventType} #${match.seed}`,
+                  })
+                }
+
+                const merged = [...byKey.values()]
+                actions.setSeededEvents(divisionId, merged)
+              }}
+            >
+              Apply events
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold">Seeded Team Mapping</h2>
             <p className="text-sm text-slate-400">
-              Select a division and club, then assign which two players represent each seed (Women #1/#2, Men #1/#2,
-              Mixed #1–#4).
+              Select a profile, division, and club, then assign which two players represent each event seed.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <label className="text-sm text-slate-300">
+              <span className="mr-2 text-xs text-slate-400">Profile</span>
+              <select
+                className="rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-sm text-slate-100"
+                value={mappingProfile?.id ?? state.defaultLineupProfileId}
+                onChange={(e) => setMappingProfileId(e.target.value)}
+              >
+                {state.lineupProfiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.id === state.defaultLineupProfileId ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="text-sm text-slate-300">
               <span className="mr-2 text-xs text-slate-400">Division</span>
               <select
@@ -822,7 +1145,7 @@ export function SetupPage() {
             </label>
             <button
               className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
-              onClick={() => actions.autoSeed(divisionId, clubId)}
+              onClick={() => actions.autoSeed(divisionId, clubId, mappingProfile?.id)}
               title="Auto-fill mapping for the selected club in this division"
               disabled={!state.clubs.length || !clubId}
             >
@@ -830,11 +1153,67 @@ export function SetupPage() {
             </button>
             <button
               className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
-              onClick={() => actions.autoSeed(divisionId)}
+              onClick={() => actions.autoSeed(divisionId, undefined, mappingProfile?.id)}
               title="Auto-fill mapping for all clubs in this division"
               disabled={!state.clubs.length}
             >
               Auto-seed all clubs
+            </button>
+            <button
+              className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+              disabled={tournamentLocked}
+              onClick={() => {
+                const name = prompt('New mapping profile name?', 'Alternate')
+                if (name == null) return
+                const trimmed = name.trim()
+                if (!trimmed.length) return
+                const id = `lp:${crypto.randomUUID()}`
+                actions.addLineupProfile(id, trimmed, mappingProfile?.id)
+                setMappingProfileId(id)
+              }}
+              title="Create a new mapping profile (copied from current)"
+            >
+              Add profile
+            </button>
+            <button
+              className="rounded-md px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900 hover:text-white disabled:opacity-50"
+              disabled={tournamentLocked || !mappingProfile}
+              onClick={() => {
+                if (!mappingProfile) return
+                const next = prompt('Rename profile', mappingProfile.name)
+                if (next == null) return
+                const trimmed = next.trim()
+                if (!trimmed.length) return
+                actions.renameLineupProfile(mappingProfile.id, trimmed)
+              }}
+              title="Rename this profile"
+            >
+              Rename
+            </button>
+            <button
+              className="rounded-md border border-red-900/60 px-3 py-2 text-sm font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-50"
+              disabled={tournamentLocked || !mappingProfile || mappingProfile.id === state.defaultLineupProfileId}
+              onClick={() => {
+                if (!mappingProfile) return
+                if (mappingProfile.id === state.defaultLineupProfileId) return
+                if (!confirm(`Delete profile \"${mappingProfile.name}\"?\n\nMatches using it will fall back to the default profile.`)) return
+                actions.deleteLineupProfile(mappingProfile.id)
+                setMappingProfileId(state.defaultLineupProfileId)
+              }}
+              title="Delete this profile (cannot delete default)"
+            >
+              Delete
+            </button>
+            <button
+              className="rounded-md border border-amber-900/60 bg-amber-950/20 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-950/40 disabled:opacity-50"
+              disabled={tournamentLocked || !mappingProfile || mappingProfile.id === state.defaultLineupProfileId}
+              onClick={() => {
+                if (!mappingProfile) return
+                actions.setDefaultLineupProfile(mappingProfile.id)
+              }}
+              title="Make this the default mapping profile"
+            >
+              Set default
             </button>
           </div>
         </div>
@@ -854,7 +1233,7 @@ export function SetupPage() {
           </div>
 
           <div className="divide-y divide-slate-800 bg-slate-950/30">
-            {SEEDED_EVENTS.map((ev) => {
+            {seededEventsForDivision.map((ev) => {
               const k = seedKey(ev.eventType, ev.seed)
               const selected = seedsForClub?.[k]?.playerIds ?? [null, null]
 
@@ -890,6 +1269,7 @@ export function SetupPage() {
                           ev.eventType as EventType,
                           ev.seed,
                           [next1, next2],
+                          mappingProfile?.id,
                         )
                       }}
                     >
@@ -914,6 +1294,7 @@ export function SetupPage() {
                           ev.eventType as EventType,
                           ev.seed,
                           [next1, next2],
+                          mappingProfile?.id,
                         )
                       }}
                     >
@@ -928,7 +1309,9 @@ export function SetupPage() {
                   <div className="col-span-1 text-right">
                     <button
                       className="rounded-md px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
-                      onClick={() => actions.setSeed(divisionId, clubId, ev.eventType as EventType, ev.seed, [null, null])}
+                      onClick={() =>
+                        actions.setSeed(divisionId, clubId, ev.eventType as EventType, ev.seed, [null, null], mappingProfile?.id)
+                      }
                       title="Clear"
                     >
                       ✕

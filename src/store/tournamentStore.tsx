@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { generateSchedule } from '../domain/scheduler'
-import { SEEDED_EVENTS } from '../domain/constants'
 import { seedKey } from '../domain/keys'
-import type { ClubId, PlayerId, TournamentStateV2 } from '../domain/types'
+import type { ClubId, Match, PlayerId, TournamentStateV2 } from '../domain/types'
 import { computeMatch } from '../domain/analytics'
+import { getEventScheduleModesForDivision, getSeededEventsForDivision } from '../domain/selectors'
 import { createInitialTournamentState } from './state'
 import { normalizeTournamentState } from './normalizeTournamentState'
 import { TournamentStoreContext } from './useTournamentStore'
@@ -165,37 +165,47 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
         }
       }
 
-      // Extend division configs with empty seed mappings + enabled flag.
-      const divisionConfigs = state.divisionConfigs.map((dc) => {
-        if (dc.seedsByClub[clubId]) return dc
-        const clubRecord: Record<string, { playerIds: [PlayerId | null, PlayerId | null] }> = {}
-        for (const ev of SEEDED_EVENTS) {
-          clubRecord[seedKey(ev.eventType, ev.seed)] = { playerIds: [null, null] }
-        }
-        return {
-          ...dc,
-          seedsByClub: { ...dc.seedsByClub, [clubId]: clubRecord },
-          clubEnabled: { ...(dc.clubEnabled ?? {}), [clubId]: true },
-        }
-      })
+      const extendDivisionConfigsForClub = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
+        divisionConfigs.map((dc) => {
+          if (dc.seedsByClub?.[clubId]) return dc
+          const clubRecord: Record<string, { playerIds: [PlayerId | null, PlayerId | null] }> = {}
+          for (const ev of getSeededEventsForDivision(state, dc.divisionId)) {
+            clubRecord[seedKey(ev.eventType, ev.seed)] = { playerIds: [null, null] }
+          }
+          return {
+            ...dc,
+            seedsByClub: { ...(dc.seedsByClub ?? {}), [clubId]: clubRecord },
+            clubEnabled: { ...(dc.clubEnabled ?? {}), [clubId]: true },
+          }
+        })
+
+      // Extend ALL lineup profiles (and legacy default divisionConfigs) for this new club.
+      const lineupProfiles = state.lineupProfiles.map((lp) => ({ ...lp, divisionConfigs: extendDivisionConfigsForClub(lp.divisionConfigs) }))
+      const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
+      const divisionConfigs = extendDivisionConfigsForClub(defaultProfile.divisionConfigs)
 
       // Remove any existing matches (schedule depends on club set); keep scores table clean.
       const matches = state.matches.filter((m) => m.clubA !== clubId && m.clubB !== clubId)
-      return touch({ ...state, clubs, players, divisionConfigs, matches })
+      return touch({ ...state, clubs, players, lineupProfiles, divisionConfigs, matches })
     }
     case 'club.remove': {
       const clubId = action.clubId
       const clubs = state.clubs.filter((c) => c.id !== clubId)
       const players = state.players.filter((p) => p.clubId !== clubId)
-      const divisionConfigs = state.divisionConfigs.map((dc) => {
-        const seedsByClub = { ...dc.seedsByClub }
-        delete (seedsByClub as Record<string, unknown>)[clubId]
-        const enabled: Record<string, boolean> = { ...(dc.clubEnabled ?? {}) }
-        delete enabled[clubId]
-        return { ...dc, seedsByClub, clubEnabled: enabled }
-      })
+      const pruneDivisionConfigsForClub = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
+        divisionConfigs.map((dc) => {
+          const seedsByClub = { ...(dc.seedsByClub ?? {}) }
+          delete (seedsByClub as Record<string, unknown>)[clubId]
+          const enabled: Record<string, boolean> = { ...(dc.clubEnabled ?? {}) }
+          delete enabled[clubId]
+          return { ...dc, seedsByClub, clubEnabled: enabled }
+        })
+
+      const lineupProfiles = state.lineupProfiles.map((lp) => ({ ...lp, divisionConfigs: pruneDivisionConfigsForClub(lp.divisionConfigs) }))
+      const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
+      const divisionConfigs = pruneDivisionConfigsForClub(defaultProfile.divisionConfigs)
       const matches = state.matches.filter((m) => m.clubA !== clubId && m.clubB !== clubId)
-      return touch({ ...state, clubs, players, divisionConfigs, matches })
+      return touch({ ...state, clubs, players, lineupProfiles, divisionConfigs, matches })
     }
     case 'club.name.set': {
       const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, name: action.name } : c))
@@ -208,74 +218,316 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, code: nextCode } : c))
       return touch({ ...state, clubs })
     }
+    case 'division.add': {
+      const d = action.division
+      const id = String(d.id ?? '').trim()
+      const code = String(d.code ?? '').trim()
+      const name = String(d.name ?? '').trim()
+      if (!id.length || !name.length) return state
+      if (state.divisions.some((x) => x.id === id)) return state
+      const divisions = [...state.divisions, { id, code, name }]
+
+      const addDivisionConfig = (divisionConfigs: TournamentStateV2['divisionConfigs']) => [
+        ...divisionConfigs,
+        { divisionId: id, seedsByClub: {}, clubEnabled: {} },
+      ]
+      const lineupProfiles = state.lineupProfiles.map((lp) => ({ ...lp, divisionConfigs: addDivisionConfig(lp.divisionConfigs) }))
+      const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
+      const divisionConfigs = addDivisionConfig(defaultProfile.divisionConfigs)
+
+      // For backwards compatibility with the old roster model, precreate 4W/4M empty slots per club for the new division.
+      const players = [...state.players]
+      for (const club of state.clubs) {
+        for (let i = 1; i <= 4; i++) {
+          players.push({ id: `${id}:${club.id}:W${i}`, clubId: club.id, divisionId: id, gender: 'F', name: '' })
+          players.push({ id: `${id}:${club.id}:M${i}`, clubId: club.id, divisionId: id, gender: 'M', name: '' })
+        }
+      }
+
+      return touch({
+        ...state,
+        divisions,
+        players,
+        lineupProfiles,
+        divisionConfigs,
+        seededEventsByDivision: { ...state.seededEventsByDivision, [id]: state.seededEvents },
+        eventScheduleModesByDivision: { ...state.eventScheduleModesByDivision, [id]: state.eventScheduleModes },
+      })
+    }
+    case 'division.update': {
+      const divisionId = action.divisionId
+      if (!divisionId) return state
+      const divisions = state.divisions.map((d) => {
+        if (d.id !== divisionId) return d
+        return {
+          ...d,
+          code: action.code != null ? String(action.code) : d.code,
+          name: action.name != null ? String(action.name) : d.name,
+        }
+      })
+      return touch({ ...state, divisions })
+    }
+    case 'division.delete': {
+      const divisionId = action.divisionId
+      if (!divisionId) return state
+      const divisions = state.divisions.filter((d) => d.id !== divisionId)
+      const players = state.players.filter((p) => p.divisionId !== divisionId)
+      const matches = state.matches.filter((m) => m.divisionId !== divisionId)
+      const dropDivisionConfig = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
+        divisionConfigs.filter((dc) => dc.divisionId !== divisionId)
+      const lineupProfiles = state.lineupProfiles.map((lp) => ({ ...lp, divisionConfigs: dropDivisionConfig(lp.divisionConfigs) }))
+      const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
+      const divisionConfigs = dropDivisionConfig(defaultProfile.divisionConfigs)
+      const seededEventsByDivision = { ...state.seededEventsByDivision }
+      delete seededEventsByDivision[divisionId]
+      const eventScheduleModesByDivision = { ...state.eventScheduleModesByDivision }
+      delete eventScheduleModesByDivision[divisionId]
+      return touch({ ...state, divisions, players, matches, lineupProfiles, divisionConfigs, seededEventsByDivision, eventScheduleModesByDivision })
+    }
+    case 'lineup.profile.add': {
+      const profileId = action.profileId.trim()
+      const name = action.name.trim()
+      if (!profileId.length) return state
+      if (state.lineupProfiles.some((p) => p.id === profileId)) return state
+      const baseId = action.baseProfileId?.trim() || state.defaultLineupProfileId
+      const baseProfile = state.lineupProfiles.find((p) => p.id === baseId) ?? state.lineupProfiles[0]
+      const divisionConfigs = (baseProfile?.divisionConfigs ?? state.divisionConfigs).map((dc) => ({
+        ...dc,
+        seedsByClub: { ...(dc.seedsByClub ?? {}) },
+        clubEnabled: { ...(dc.clubEnabled ?? {}) },
+      }))
+      const lineupProfiles = [...state.lineupProfiles, { id: profileId, name: name || 'Profile', divisionConfigs }]
+      return touch({ ...state, lineupProfiles })
+    }
+    case 'lineup.profile.rename': {
+      const profileId = action.profileId.trim()
+      const name = action.name.trim()
+      if (!profileId.length) return state
+      const lineupProfiles = state.lineupProfiles.map((p) => (p.id === profileId ? { ...p, name: name || p.name } : p))
+      return touch({ ...state, lineupProfiles })
+    }
+    case 'lineup.profile.delete': {
+      const profileId = action.profileId.trim()
+      if (!profileId.length) return state
+      if (profileId === state.defaultLineupProfileId) return state
+      const lineupProfiles = state.lineupProfiles.filter((p) => p.id !== profileId)
+      if (lineupProfiles.length === 0) return state
+      const matches = state.matches.map((m) =>
+        (m.lineupProfileId ?? state.defaultLineupProfileId) === profileId
+          ? { ...m, lineupProfileId: state.defaultLineupProfileId }
+          : m,
+      )
+      return touch({ ...state, lineupProfiles, matches })
+    }
+    case 'lineup.profile.default.set': {
+      const profileId = action.profileId.trim()
+      if (!profileId.length) return state
+      if (!state.lineupProfiles.some((p) => p.id === profileId)) return state
+      const defaultProfile = state.lineupProfiles.find((p) => p.id === profileId) ?? state.lineupProfiles[0]!
+      return touch({ ...state, defaultLineupProfileId: profileId, divisionConfigs: defaultProfile.divisionConfigs })
+    }
+    case 'player.add': {
+      const divisionId = action.divisionId
+      const clubId = action.clubId
+      const gender = action.gender
+      if (!divisionId || !clubId) return state
+      if (!state.divisions.some((d) => d.id === divisionId)) return state
+      if (!state.clubs.some((c) => c.id === clubId)) return state
+      if (gender !== 'F' && gender !== 'M') return state
+
+      const prefix = gender === 'F' ? 'W' : 'M'
+      let maxN = 0
+      for (const p of state.players) {
+        if (p.divisionId !== divisionId) continue
+        if (p.clubId !== clubId) continue
+        if (p.gender !== gender) continue
+        const label = (p as { slotLabel?: unknown }).slotLabel
+        const txt = typeof label === 'string' ? label : ''
+        const m1 = new RegExp(`^${prefix}(\\d+)$`).exec(txt)
+        if (m1) maxN = Math.max(maxN, Number(m1[1]) || 0)
+        const m2 = /:(W|M)(\d+)$/.exec(p.id)
+        if (m2 && m2[1] === prefix) maxN = Math.max(maxN, Number(m2[2]) || 0)
+      }
+      const n = maxN + 1
+      const slotLabel = `${prefix}${n}`
+      const sortOrder = (gender === 'F' ? 0 : 1) * 1000 + n
+      const id = `p:${crypto.randomUUID()}`
+      const players = [
+        ...state.players,
+        {
+          id,
+          clubId,
+          divisionId,
+          gender,
+          slotLabel,
+          sortOrder,
+          name: '',
+        },
+      ]
+      return touch({ ...state, players })
+    }
+    case 'player.remove': {
+      const playerId = action.playerId
+      const players = state.players.filter((p) => p.id !== playerId)
+
+      // Clear references from seed mappings so we don't point at deleted players.
+      const cleanDivisionConfigs = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
+        divisionConfigs.map((dc) => {
+          const nextSeedsByClub: typeof dc.seedsByClub = {}
+          for (const [clubId, clubRecord] of Object.entries(dc.seedsByClub ?? {})) {
+            const nextClubRecord: typeof clubRecord = { ...(clubRecord as typeof clubRecord) }
+            for (const [k, v] of Object.entries(clubRecord ?? {})) {
+              const ids = (v as { playerIds?: [PlayerId | null, PlayerId | null] }).playerIds
+              if (!ids) continue
+              const a = ids[0] === playerId ? null : ids[0]
+              const b = ids[1] === playerId ? null : ids[1]
+              if (a !== ids[0] || b !== ids[1]) nextClubRecord[k as keyof typeof nextClubRecord] = { playerIds: [a, b] }
+            }
+            nextSeedsByClub[clubId as keyof typeof nextSeedsByClub] = nextClubRecord
+          }
+          return { ...dc, seedsByClub: nextSeedsByClub }
+        })
+
+      const divisionConfigs = cleanDivisionConfigs(state.divisionConfigs)
+      const lineupProfiles = state.lineupProfiles.map((lp) => ({ ...lp, divisionConfigs: cleanDivisionConfigs(lp.divisionConfigs) }))
+      return touch({ ...state, players, divisionConfigs, lineupProfiles })
+    }
     case 'player.name.set': {
       const players = state.players.map((p) =>
         p.id === action.playerId ? { ...p, name: action.name } : p,
       )
       return touch({ ...state, players })
     }
-    case 'division.autoseed': {
-      const divisionConfigs = state.divisionConfigs.map((dc) => {
-        if (dc.divisionId !== action.divisionId) return dc
-
-        const applyToClubIds = action.clubId ? [action.clubId] : state.clubs.map((c) => c.id)
-        const nextSeedsByClub = { ...dc.seedsByClub }
-
-        for (const clubId of applyToClubIds) {
-          const clubRecord = { ...nextSeedsByClub[clubId] }
-
-          const wid = (n: 1 | 2 | 3 | 4) => `${action.divisionId}:${clubId}:W${n}` as PlayerId
-          const mid = (n: 1 | 2 | 3 | 4) => `${action.divisionId}:${clubId}:M${n}` as PlayerId
-
-          // Women
-          clubRecord[seedKey('WOMENS_DOUBLES', 1)] = { playerIds: [wid(1), wid(2)] }
-          clubRecord[seedKey('WOMENS_DOUBLES', 2)] = { playerIds: [wid(3), wid(4)] }
-
-          // Men
-          clubRecord[seedKey('MENS_DOUBLES', 1)] = { playerIds: [mid(1), mid(2)] }
-          clubRecord[seedKey('MENS_DOUBLES', 2)] = { playerIds: [mid(3), mid(4)] }
-
-          // Mixed (UI expects [Woman, Man])
-          clubRecord[seedKey('MIXED_DOUBLES', 1)] = { playerIds: [wid(1), mid(1)] }
-          clubRecord[seedKey('MIXED_DOUBLES', 2)] = { playerIds: [wid(2), mid(2)] }
-          clubRecord[seedKey('MIXED_DOUBLES', 3)] = { playerIds: [wid(3), mid(3)] }
-          clubRecord[seedKey('MIXED_DOUBLES', 4)] = { playerIds: [wid(4), mid(4)] }
-
-          nextSeedsByClub[clubId] = clubRecord
-        }
-
-        return { ...dc, seedsByClub: nextSeedsByClub }
+    case 'seeded.events.set': {
+      const divisionId = action.divisionId
+      if (!divisionId) return state
+      const raw = Array.isArray(action.seededEvents) ? action.seededEvents : []
+      const next = raw
+        .map((x) => ({
+          eventType: x.eventType,
+          seed: Math.max(1, Math.floor(Number(x.seed) || 0)),
+          label: String(x.label ?? '').trim() || `${x.eventType} #${x.seed}`,
+        }))
+        .filter((x) => (x.eventType === 'WOMENS_DOUBLES' || x.eventType === 'MENS_DOUBLES' || x.eventType === 'MIXED_DOUBLES') && x.seed > 0)
+      if (next.length === 0) return state
+      const uniq = new Map<string, typeof next[number]>()
+      for (const x of next) uniq.set(`${x.eventType}:${x.seed}`, x)
+      const seededEvents = [...uniq.values()].sort((a, b) => {
+        const eo = (t: string) => (t === 'WOMENS_DOUBLES' ? 0 : t === 'MENS_DOUBLES' ? 1 : 2)
+        const d = eo(a.eventType) - eo(b.eventType)
+        if (d !== 0) return d
+        return a.seed - b.seed
       })
+      const seededEventsByDivision = { ...state.seededEventsByDivision, [divisionId]: seededEvents }
+      // Keep legacy `seededEvents` mirrored to selected division for older paths/back-compat.
+      return touch({ ...state, seededEventsByDivision, seededEvents })
+    }
+    case 'event.scheduleMode.set': {
+      const divisionId = action.divisionId
+      if (!divisionId) return state
+      const eventType = action.eventType
+      const mode = action.mode === 'ALL_VS_ALL' ? 'ALL_VS_ALL' : 'SAME_SEED'
+      const currentByDivision = getEventScheduleModesForDivision(state, divisionId)
+      if (currentByDivision[eventType] === mode) return state
+      const eventScheduleModesByDivision = {
+        ...state.eventScheduleModesByDivision,
+        [divisionId]: { ...currentByDivision, [eventType]: mode },
+      }
+      return touch({
+        ...state,
+        eventScheduleModesByDivision,
+        // Keep legacy top-level in sync for compatibility.
+        eventScheduleModes: { ...state.eventScheduleModes, [eventType]: mode },
+      })
+    }
+    case 'division.autoseed': {
+      const targetProfileId = action.profileId?.trim() || state.defaultLineupProfileId
 
-      return touch({ ...state, divisionConfigs })
+      const autoSeedDivisionConfigs = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
+        divisionConfigs.map((dc) => {
+          if (dc.divisionId !== action.divisionId) return dc
+
+          const applyToClubIds = action.clubId ? [action.clubId] : state.clubs.map((c) => c.id)
+          const nextSeedsByClub = { ...(dc.seedsByClub ?? {}) }
+
+          for (const clubId of applyToClubIds) {
+            const clubRecord = { ...(nextSeedsByClub[clubId] ?? {}) } as Record<string, { playerIds: [PlayerId | null, PlayerId | null] }>
+
+            const women = state.players.filter((p) => p.divisionId === action.divisionId && p.clubId === clubId && p.gender === 'F').slice()
+            const men = state.players.filter((p) => p.divisionId === action.divisionId && p.clubId === clubId && p.gender === 'M').slice()
+            women.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+            men.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+
+            const seedsByType = new Map<Match['eventType'], number[]>()
+            for (const ev of getSeededEventsForDivision(state, action.divisionId)) {
+              const arr = seedsByType.get(ev.eventType) ?? []
+              arr.push(ev.seed)
+              seedsByType.set(ev.eventType, arr)
+            }
+            for (const [eventType, seeds] of seedsByType) {
+              const uniq = [...new Set(seeds)].sort((a, b) => a - b)
+              for (let idx = 0; idx < uniq.length; idx++) {
+                const seed = uniq[idx]!
+                if (eventType === 'WOMENS_DOUBLES') {
+                  clubRecord[seedKey(eventType, seed)] = { playerIds: [women[idx * 2]?.id ?? null, women[idx * 2 + 1]?.id ?? null] }
+                } else if (eventType === 'MENS_DOUBLES') {
+                  clubRecord[seedKey(eventType, seed)] = { playerIds: [men[idx * 2]?.id ?? null, men[idx * 2 + 1]?.id ?? null] }
+                } else {
+                  // Mixed seed N defaults to woman N + man N.
+                  clubRecord[seedKey(eventType, seed)] = { playerIds: [women[idx]?.id ?? null, men[idx]?.id ?? null] }
+                }
+              }
+            }
+
+            nextSeedsByClub[clubId] = clubRecord
+          }
+
+          return { ...dc, seedsByClub: nextSeedsByClub }
+        })
+
+      const lineupProfiles = state.lineupProfiles.map((lp) =>
+        lp.id === targetProfileId ? { ...lp, divisionConfigs: autoSeedDivisionConfigs(lp.divisionConfigs) } : lp,
+      )
+      const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
+      const divisionConfigs =
+        state.defaultLineupProfileId === targetProfileId ? autoSeedDivisionConfigs(state.divisionConfigs) : defaultProfile.divisionConfigs
+      return touch({ ...state, lineupProfiles, divisionConfigs })
     }
     case 'division.club.enabled.set': {
-      const divisionConfigs = state.divisionConfigs.map((dc) => {
-        if (dc.divisionId !== action.divisionId) return dc
-        return {
-          ...dc,
-          clubEnabled: { ...(dc.clubEnabled ?? {}), [action.clubId]: action.enabled },
-        }
-      })
-      return touch({ ...state, divisionConfigs })
+      const updateEnabled = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
+        divisionConfigs.map((dc) => {
+          if (dc.divisionId !== action.divisionId) return dc
+          return { ...dc, clubEnabled: { ...(dc.clubEnabled ?? {}), [action.clubId]: action.enabled } }
+        })
+      const lineupProfiles = state.lineupProfiles.map((lp) => ({ ...lp, divisionConfigs: updateEnabled(lp.divisionConfigs) }))
+      const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
+      const divisionConfigs = updateEnabled(defaultProfile.divisionConfigs)
+      return touch({ ...state, lineupProfiles, divisionConfigs })
     }
     case 'division.seed.set': {
-      const divisionConfigs = state.divisionConfigs.map((dc) => {
-        if (dc.divisionId !== action.divisionId) return dc
-        const clubRecord = dc.seedsByClub[action.clubId]
-        const k = seedKey(action.eventType, action.seed)
-        return {
-          ...dc,
-          seedsByClub: {
-            ...dc.seedsByClub,
-            [action.clubId]: {
-              ...clubRecord,
-              [k]: { playerIds: action.playerIds },
+      const targetProfileId = action.profileId?.trim() || state.defaultLineupProfileId
+      const applySeed = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
+        divisionConfigs.map((dc) => {
+          if (dc.divisionId !== action.divisionId) return dc
+          const clubRecord = (dc.seedsByClub ?? {})[action.clubId] ?? {}
+          const k = seedKey(action.eventType, action.seed)
+          return {
+            ...dc,
+            seedsByClub: {
+              ...(dc.seedsByClub ?? {}),
+              [action.clubId]: {
+                ...clubRecord,
+                [k]: { playerIds: action.playerIds },
+              },
             },
-          },
-        }
-      })
-      return touch({ ...state, divisionConfigs })
+          }
+        })
+      const lineupProfiles = state.lineupProfiles.map((lp) =>
+        lp.id === targetProfileId ? { ...lp, divisionConfigs: applySeed(lp.divisionConfigs) } : lp,
+      )
+      const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
+      const divisionConfigs = targetProfileId === state.defaultLineupProfileId ? applySeed(state.divisionConfigs) : defaultProfile.divisionConfigs
+      return touch({ ...state, lineupProfiles, divisionConfigs })
     }
     case 'schedule.generate': {
       // Simple: replace schedule and drop all scores.
@@ -318,10 +570,11 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const existingIds = new Set(state.matches.map((m) => m.id))
       const additions: TournamentStateV2['matches'] = []
       for (const divisionId of divisionIds) {
+        const divisionEvents = getSeededEventsForDivision(state, divisionId)
         const nextRound = (maxRoundByDivision.get(divisionId) ?? 0) + 1
         for (let matchupIndex = 0; matchupIndex < pairings.length; matchupIndex++) {
           const [clubA, clubB, slot] = pairings[matchupIndex]!
-          for (const ev of SEEDED_EVENTS) {
+          for (const ev of divisionEvents) {
             const id = makePlayoffMatchId({
               slot,
               divisionId,
@@ -365,6 +618,8 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
               matchupIndex: Number.isFinite(incoming.matchupIndex) ? incoming.matchupIndex : x.matchupIndex,
               eventType: incoming.eventType ? incoming.eventType : x.eventType,
               seed: incoming.seed > 0 ? incoming.seed : x.seed,
+              seedA: incoming.seedA && incoming.seedA > 0 ? incoming.seedA : x.seedA,
+              seedB: incoming.seedB && incoming.seedB > 0 ? incoming.seedB : x.seedB,
               court: Number.isFinite(incoming.court) ? incoming.court : x.court,
               clubA: incoming.clubA ? incoming.clubA : x.clubA,
               clubB: incoming.clubB ? incoming.clubB : x.clubB,
@@ -663,6 +918,10 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       tournamentName: s.tournamentName ?? '',
       clubs: s.clubs,
       divisions: s.divisions,
+      seededEvents: s.seededEvents ?? [],
+      seededEventsByDivision: s.seededEventsByDivision ?? {},
+      eventScheduleModes: s.eventScheduleModes,
+      eventScheduleModesByDivision: s.eventScheduleModesByDivision ?? {},
       players: s.players,
       divisionConfigs: s.divisionConfigs,
       tournamentLockedAt: s.tournamentLockedAt ?? null,
@@ -681,6 +940,8 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         matchupIndex: m.matchupIndex,
         eventType: m.eventType,
         seed: m.seed,
+        seedA: m.seedA ?? m.seed,
+        seedB: m.seedB ?? m.seed,
         court: m.court,
         stage: m.stage ?? 'REGULAR',
         clubA: m.clubA,
@@ -759,14 +1020,27 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       removeClub: (clubId) => dispatch({ type: 'club.remove', clubId }),
       setClubName: (clubId, name) => dispatch({ type: 'club.name.set', clubId, name }),
       setClubCode: (clubId, code) => dispatch({ type: 'club.code.set', clubId, code }),
+      addDivision: (division) => dispatch({ type: 'division.add', division }),
+      updateDivision: (divisionId, patch) => dispatch({ type: 'division.update', divisionId, ...patch }),
+      deleteDivision: (divisionId) => dispatch({ type: 'division.delete', divisionId }),
+      addLineupProfile: (profileId, name, baseProfileId) =>
+        dispatch({ type: 'lineup.profile.add', profileId, name, baseProfileId }),
+      renameLineupProfile: (profileId, name) => dispatch({ type: 'lineup.profile.rename', profileId, name }),
+      deleteLineupProfile: (profileId) => dispatch({ type: 'lineup.profile.delete', profileId }),
+      setDefaultLineupProfile: (profileId) => dispatch({ type: 'lineup.profile.default.set', profileId }),
       setDivisionClubEnabled: (divisionId, clubId, enabled) =>
         dispatch({ type: 'division.club.enabled.set', divisionId, clubId, enabled }),
+      addPlayer: (divisionId, clubId, gender) => dispatch({ type: 'player.add', divisionId, clubId, gender }),
+      removePlayer: (playerId) => dispatch({ type: 'player.remove', playerId }),
       setPlayerName: (playerId, name) => dispatch({ type: 'player.name.set', playerId, name }),
-      autoSeed: (divisionId, clubId) => dispatch({ type: 'division.autoseed', divisionId, clubId }),
+      setSeededEvents: (divisionId, seededEvents) => dispatch({ type: 'seeded.events.set', divisionId, seededEvents }),
+      setEventScheduleMode: (divisionId, eventType, mode) =>
+        dispatch({ type: 'event.scheduleMode.set', divisionId, eventType, mode }),
+      autoSeed: (divisionId, clubId, profileId) => dispatch({ type: 'division.autoseed', divisionId, clubId, profileId }),
       unlockMatch: (matchId) => dispatch({ type: 'match.unlock', matchId }),
       clearAllScores: () => dispatch({ type: 'matches.scores.clearAll' }),
-      setSeed: (divisionId, clubId, eventType, seed, playerIds) =>
-        dispatch({ type: 'division.seed.set', divisionId, clubId, eventType, seed, playerIds }),
+      setSeed: (divisionId, clubId, eventType, seed, playerIds, profileId) =>
+        dispatch({ type: 'division.seed.set', divisionId, clubId, eventType, seed, playerIds, profileId }),
       generateSchedule: () => dispatch({ type: 'schedule.generate' }),
       regenerateSchedule: () => dispatch({ type: 'schedule.regenerate' }),
       addPlayoffRound: (matchIds) => dispatch({ type: 'playoff.round.add', matchIds }),

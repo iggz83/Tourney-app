@@ -5,6 +5,7 @@
 export type ClubId = string
 export type ClubCode = string
 export type DivisionId = string
+export type DivisionCode = string
 export type PlayerId = string
 export type MatchId = string
 
@@ -24,7 +25,7 @@ export interface Club {
 
 export interface Division {
   id: DivisionId
-  code: SkillDivisionCode
+  code: DivisionCode
   name: string
 }
 
@@ -33,6 +34,10 @@ export interface Player {
   clubId: ClubId
   divisionId: DivisionId
   gender: Gender
+  /** Optional stable label for UI ordering (e.g. 'W5', 'M7'). */
+  slotLabel?: string
+  /** Optional stable ordering key; lower comes first. */
+  sortOrder?: number
   /** Single display name used throughout the UI. */
   name: string
   /** Legacy fields kept for backwards compatibility with older saved tournaments. */
@@ -45,6 +50,8 @@ export interface SeededEvent {
   seed: number
   label: string
 }
+
+export type EventScheduleMode = 'SAME_SEED' | 'ALL_VS_ALL'
 
 export interface SeedAssignment {
   /**
@@ -79,15 +86,28 @@ export interface Match {
   round: number
   matchupIndex: number
   eventType: EventType
+  /** Legacy/primary seed value used by old code paths and cloud row schema. */
   seed: number
+  /** Optional per-side seed (for cross-seed formats like Men #1 vs Men #3). */
+  seedA?: number
+  /** Optional per-side seed (for cross-seed formats like Men #1 vs Men #3). */
+  seedB?: number
   /** 0 means "unassigned" (printouts can be filled manually) */
   court: number
   clubA: ClubId
   clubB: ClubId
+  /** Which lineup/mapping profile to use for resolving players (defaults to tournament default). */
+  lineupProfileId?: string
   /** Defaults to REGULAR when missing (back-compat). */
   stage?: MatchStage
   score?: MatchScore
   completedAt?: string
+}
+
+export interface LineupProfile {
+  id: string
+  name: string
+  divisionConfigs: DivisionConfig[]
 }
 
 export interface TournamentStateV1 {
@@ -128,7 +148,23 @@ export interface TournamentStateV2 {
   tournamentName: string
   clubs: Club[]
   divisions: Division[]
+  /** Which seeded events exist for this tournament (used for scheduling + mapping UI). */
+  seededEvents: SeededEvent[]
+  /** Division-specific seeded events (preferred). */
+  seededEventsByDivision: Record<DivisionId, SeededEvent[]>
+  /** Scheduling behavior per event type (same-seed or all-vs-all seeds). */
+  eventScheduleModes: Record<EventType, EventScheduleMode>
+  /** Division-specific scheduling behavior per event type (preferred). */
+  eventScheduleModesByDivision: Record<DivisionId, Record<EventType, EventScheduleMode>>
   players: Player[]
+  /** Saved mapping configurations; each match can point at one. */
+  lineupProfiles: LineupProfile[]
+  /** Which profile is considered the default for new matches. */
+  defaultLineupProfileId: string
+  /**
+   * Legacy/default division config (back-compat). Mirrors the default lineup profile's divisionConfigs.
+   * Existing code paths (scheduler, setup, etc.) may still reference this.
+   */
   divisionConfigs: DivisionConfig[]
   matches: Match[]
   /** When set, the tournament is locked (read-only) across the app. */
