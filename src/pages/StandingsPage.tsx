@@ -15,7 +15,16 @@ export function StandingsPage() {
   const clubStandings = useMemo(() => computeClubStandings(state), [state])
   const playerStandings = useMemo(() => computePlayerStandings(state), [state])
   const coverage = useMemo(() => computeIndividualCoverage(state), [state])
-  const namedPlayersCount = useMemo(() => state.players.filter(hasPlayerName).length, [state.players])
+  const hasTeamInDivision = useMemo(() => {
+    return (divisionId: string, clubId: string) => {
+      const dc = state.divisionConfigs.find((d) => d.divisionId === divisionId)
+      return (dc?.clubEnabled?.[clubId] ?? true) !== false
+    }
+  }, [state.divisionConfigs])
+  const namedPlayersCount = useMemo(
+    () => state.players.filter((p) => hasPlayerName(p) && hasTeamInDivision(p.divisionId, p.clubId)).length,
+    [hasTeamInDivision, state.players],
+  )
 
   // Standings should use full club names (fallback to acronym).
   const clubNameById = useMemo(
@@ -38,12 +47,12 @@ export function StandingsPage() {
     return state.divisions
       .map((d) => {
       const women = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p))
+        .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p) && hasTeamInDivision(d.id, p.clubId))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id)! }))
         .sort((x, y) => compare(x.s, y.s))
 
       const men = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'M' && hasPlayerName(p))
+        .filter((p) => p.divisionId === d.id && p.gender === 'M' && hasPlayerName(p) && hasTeamInDivision(d.id, p.clubId))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id)! }))
         .sort((x, y) => compare(x.s, y.s))
 
@@ -54,7 +63,7 @@ export function StandingsPage() {
       }
     })
       .filter((x) => x.women.length + x.men.length > 0)
-  }, [TOP_N, playerStandingByPlayerId, showAll, state.divisions, state.players])
+  }, [TOP_N, hasTeamInDivision, playerStandingByPlayerId, showAll, state.divisions, state.players])
 
   return (
     <div className="space-y-6">
@@ -135,6 +144,7 @@ export function StandingsPage() {
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
+                  {women.length > 0 ? (
                   <div className="overflow-x-auto rounded-xl border border-slate-800">
                     <div className="min-w-[520px]">
                       <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
@@ -161,7 +171,9 @@ export function StandingsPage() {
                       </div>
                     </div>
                   </div>
+                  ) : null}
 
+                  {men.length > 0 ? (
                   <div className="overflow-x-auto rounded-xl border border-slate-800">
                     <div className="min-w-[520px]">
                       <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
@@ -188,6 +200,7 @@ export function StandingsPage() {
                       </div>
                     </div>
                   </div>
+                  ) : null}
                 </div>
               </div>
             ))}

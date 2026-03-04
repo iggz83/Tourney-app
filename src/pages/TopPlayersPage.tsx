@@ -20,6 +20,12 @@ export function TopPlayersPage() {
   const TOP_N = 5
   const BASE_INIT = 18
   const clubCodeById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.code || c.id])), [state.clubs])
+  const hasTeamInDivision = useMemo(() => {
+    return (divisionId: string, clubId: string) => {
+      const dc = state.divisionConfigs.find((d) => d.divisionId === divisionId)
+      return (dc?.clubEnabled?.[clubId] ?? true) !== false
+    }
+  }, [state.divisionConfigs])
 
   const playerStandings = useMemo(() => computePlayerStandings(state), [state])
   const playerStandingByPlayerId = useMemo(
@@ -37,14 +43,14 @@ export function TopPlayersPage() {
     return state.divisions
       .map((d) => {
       const women = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p))
+        .filter((p) => p.divisionId === d.id && p.gender === 'F' && hasPlayerName(p) && hasTeamInDivision(d.id, p.clubId))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id) }))
         .filter((x): x is { p: (typeof x)['p']; s: NonNullable<(typeof x)['s']> } => Boolean(x.s))
         .sort((x, y) => compare(x.s, y.s))
         .slice(0, TOP_N)
 
       const men = state.players
-        .filter((p) => p.divisionId === d.id && p.gender === 'M' && hasPlayerName(p))
+        .filter((p) => p.divisionId === d.id && p.gender === 'M' && hasPlayerName(p) && hasTeamInDivision(d.id, p.clubId))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id) }))
         .filter((x): x is { p: (typeof x)['p']; s: NonNullable<(typeof x)['s']> } => Boolean(x.s))
         .sort((x, y) => compare(x.s, y.s))
@@ -53,7 +59,7 @@ export function TopPlayersPage() {
       return { division: d, women, men }
     })
       .filter((x) => x.women.length + x.men.length > 0)
-  }, [TOP_N, playerStandingByPlayerId, state.divisions, state.players])
+  }, [TOP_N, hasTeamInDivision, playerStandingByPlayerId, state.divisions, state.players])
 
   const rootRef = useRef<HTMLDivElement | null>(null)
   const gridAreaRef = useRef<HTMLDivElement | null>(null)
@@ -226,6 +232,7 @@ export function TopPlayersPage() {
                 </div>
 
                 <div className="grid gap-3">
+                  {women.length > 0 ? (
                   <div>
                     <div
                       className="mb-2 font-semibold text-slate-300"
@@ -248,7 +255,9 @@ export function TopPlayersPage() {
                       ))}
                     </div>
                   </div>
+                  ) : null}
 
+                  {men.length > 0 ? (
                   <div>
                     <div
                       className="mb-2 font-semibold text-slate-300"
@@ -271,6 +280,7 @@ export function TopPlayersPage() {
                       ))}
                     </div>
                   </div>
+                  ) : null}
                 </div>
               </div>
             ))}
