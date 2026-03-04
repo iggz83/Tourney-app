@@ -846,21 +846,25 @@ export function ScoreEntryPage() {
             ].join(' ')}
             disabled={tournamentLocked}
             onClick={() => {
-              const incomplete = state.matches.filter((m) => !hasFullLineup(m))
+              const incomplete = state.matches.filter((m) => {
+                // Never delete scored/completed matches, even if they have missing/blank players.
+                if (m.score || m.completedAt) return false
+                return !hasFullLineup(m)
+              })
               if (incomplete.length === 0) {
                 alert('No games with missing players found.')
                 return
               }
               if (
                 !confirm(
-                  `Delete games with missing players?\n\nThis will permanently delete ${incomplete.length} match(es) where all 4 players are not filled (named).\n\nContinue?`,
+                  `Delete games with missing players?\n\nThis will permanently delete ${incomplete.length} unscored match(es) where all 4 players are not filled (named).\n\nScored games will NOT be deleted.\n\nContinue?`,
                 )
               )
                 return
               actions.deleteMatches(incomplete.map((m) => m.id))
               setDrafts({})
             }}
-            title="Removes matches with missing players"
+            title="Removes unscored matches with missing players"
           >
             Delete games with missing players
           </button>
