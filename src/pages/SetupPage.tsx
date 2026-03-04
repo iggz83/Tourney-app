@@ -243,7 +243,11 @@ export function SetupPage() {
                     return
 
                   const newTid = crypto.randomUUID()
-                  // Keep setup but clear matches/scores for the new tournament
+                  // IMPORTANT: disable cloud (remove current tid) BEFORE touching state.
+                  // Otherwise we can accidentally push an "unlock" (re-open) to the currently-loaded completed tournament.
+                  clearTournamentIdFromUrl()
+
+                  // Keep setup but clear matches/scores for the new tournament.
                   actions.importState({
                     ...state,
                     tournamentName: '',
