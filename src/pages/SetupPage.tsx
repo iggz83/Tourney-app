@@ -767,7 +767,7 @@ export function SetupPage() {
             <div className="col-span-1 text-right"> </div>
           </div>
           <div className="divide-y divide-slate-800">
-            {state.divisions.map((d) => (
+            {state.divisions.map((d, idx) => (
               <div key={d.id} className="grid grid-cols-12 items-center gap-2 px-3 py-2">
                 <CommitInput
                   className="col-span-3 rounded-md border border-slate-800 bg-slate-950/40 px-2 py-1 text-sm text-slate-100 outline-none focus:border-slate-600 disabled:opacity-50"
@@ -787,6 +787,22 @@ export function SetupPage() {
                   }}
                 />
                 <div className="col-span-1 flex justify-end">
+                  <button
+                    className="mr-1 rounded-md border border-slate-700 px-1.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                    disabled={tournamentLocked || idx === 0}
+                    title="Move up"
+                    onClick={() => actions.moveDivision(d.id, 'up')}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    className="mr-1 rounded-md border border-slate-700 px-1.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-900 disabled:opacity-50"
+                    disabled={tournamentLocked || idx === state.divisions.length - 1}
+                    title="Move down"
+                    onClick={() => actions.moveDivision(d.id, 'down')}
+                  >
+                    ↓
+                  </button>
                   <button
                     className="rounded-md border border-red-900/60 px-2 py-1 text-xs font-semibold text-red-200 hover:bg-red-950/40 disabled:opacity-50"
                     disabled={tournamentLocked || state.divisions.length <= 1}

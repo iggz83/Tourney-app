@@ -16,6 +16,7 @@ export type TournamentStoreAction =
   | { type: 'club.code.set'; clubId: ClubId; code: string }
   | { type: 'division.add'; division: { id: string; code: string; name: string } }
   | { type: 'division.update'; divisionId: string; code?: string; name?: string }
+  | { type: 'division.move'; divisionId: string; direction: 'up' | 'down' }
   | { type: 'division.delete'; divisionId: string }
   | { type: 'lineup.profile.add'; profileId: string; name: string; baseProfileId?: string }
   | { type: 'lineup.profile.rename'; profileId: string; name: string }
@@ -86,6 +87,7 @@ export type TournamentStore = {
     setClubCode(clubId: ClubId, code: string): void
     addDivision(division: { id: string; code: string; name: string }): void
     updateDivision(divisionId: string, patch: { code?: string; name?: string }): void
+    moveDivision(divisionId: string, direction: 'up' | 'down'): void
     deleteDivision(divisionId: string): void
     addLineupProfile(profileId: string, name: string, baseProfileId?: string): void
     renameLineupProfile(profileId: string, name: string): void

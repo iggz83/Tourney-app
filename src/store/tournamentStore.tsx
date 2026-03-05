@@ -267,6 +267,18 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       })
       return touch({ ...state, divisions })
     }
+    case 'division.move': {
+      const divisionId = action.divisionId
+      if (!divisionId) return state
+      const idx = state.divisions.findIndex((d) => d.id === divisionId)
+      if (idx < 0) return state
+      const nextIdx = action.direction === 'up' ? idx - 1 : idx + 1
+      if (nextIdx < 0 || nextIdx >= state.divisions.length) return state
+      const divisions = state.divisions.slice()
+      const [item] = divisions.splice(idx, 1)
+      divisions.splice(nextIdx, 0, item!)
+      return touch({ ...state, divisions })
+    }
     case 'division.delete': {
       const divisionId = action.divisionId
       if (!divisionId) return state
@@ -1031,6 +1043,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       setClubCode: (clubId, code) => dispatch({ type: 'club.code.set', clubId, code }),
       addDivision: (division) => dispatch({ type: 'division.add', division }),
       updateDivision: (divisionId, patch) => dispatch({ type: 'division.update', divisionId, ...patch }),
+      moveDivision: (divisionId, direction) => dispatch({ type: 'division.move', divisionId, direction }),
       deleteDivision: (divisionId) => dispatch({ type: 'division.delete', divisionId }),
       addLineupProfile: (profileId, name, baseProfileId) =>
         dispatch({ type: 'lineup.profile.add', profileId, name, baseProfileId }),
