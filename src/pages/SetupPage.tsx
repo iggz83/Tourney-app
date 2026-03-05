@@ -95,6 +95,7 @@ export function SetupPage() {
   const [womenSeeds, setWomenSeeds] = useState<string>(String(seededCounts.women))
   const [menSeeds, setMenSeeds] = useState<string>(String(seededCounts.men))
   const [mixedSeeds, setMixedSeeds] = useState<string>(String(seededCounts.mixed))
+  const [eventsNotice, setEventsNotice] = useState<string>('')
   const [pwEditing, setPwEditing] = useState(false)
   const [pw1, setPw1] = useState('')
   const [pw2, setPw2] = useState('')
@@ -133,6 +134,12 @@ export function SetupPage() {
     setMenSeeds(String(seededCounts.men))
     setMixedSeeds(String(seededCounts.mixed))
   }, [seededCounts.men, seededCounts.mixed, seededCounts.women])
+
+  useEffect(() => {
+    if (!eventsNotice) return
+    const t = window.setTimeout(() => setEventsNotice(''), 2800)
+    return () => window.clearTimeout(t)
+  }, [eventsNotice])
 
   // Keep selected club valid if clubs list changes (add/remove).
   useEffect(() => {
@@ -1081,12 +1088,46 @@ export function SetupPage() {
                 }
 
                 const merged = [...byKey.values()]
+                const normalize = (arr: typeof merged) =>
+                  [...arr]
+                    .map((ev) => ({
+                      eventType: ev.eventType,
+                      seed: Math.max(1, Math.floor(Number(ev.seed) || 1)),
+                      label: String(ev.label ?? '').trim(),
+                    }))
+                    .sort((a, b) => {
+                      const eo = (t: string) => (t === 'WOMENS_DOUBLES' ? 0 : t === 'MENS_DOUBLES' ? 1 : 2)
+                      const d = eo(a.eventType) - eo(b.eventType)
+                      if (d !== 0) return d
+                      return a.seed - b.seed
+                    })
+                const prevNorm = normalize(seededEventsForDivision)
+                const nextNorm = normalize(merged)
+                if (nextNorm.length === 0) {
+                  setEventsNotice('No events to apply. Add at least one seed.')
+                  return
+                }
+                const same =
+                  prevNorm.length === nextNorm.length &&
+                  prevNorm.every(
+                    (x, i) =>
+                      x.eventType === nextNorm[i]!.eventType &&
+                      x.seed === nextNorm[i]!.seed &&
+                      x.label === nextNorm[i]!.label,
+                  )
+
                 actions.setSeededEvents(divisionId, merged)
+                if (same) {
+                  setEventsNotice('No changes detected for this division.')
+                } else {
+                  setEventsNotice('Events updated. Regenerate schedule to apply to existing matches.')
+                }
               }}
             >
               Apply events
             </button>
           </div>
+          {eventsNotice ? <div className="mt-2 text-xs text-amber-200">{eventsNotice}</div> : null}
         </div>
       </section>
 
