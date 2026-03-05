@@ -44,6 +44,7 @@ export type TournamentStoreAction =
     }
   | { type: 'schedule.generate' }
   | { type: 'schedule.regenerate' }
+  | { type: 'matches.rounds.optimize'; matchIds: MatchId[]; targetCourts?: number }
   | { type: 'playoff.round.add'; matchIds: MatchId[] }
   | { type: 'matches.upsert'; match: TournamentStateV2['matches'][number]; source?: 'local' | 'remote' }
   | { type: 'match.delete'; matchId: MatchId; source?: 'local' | 'remote' }
@@ -113,6 +114,7 @@ export type TournamentStore = {
     ): void
     generateSchedule(): void
     regenerateSchedule(): void
+    optimizeRounds(matchIds: MatchId[], targetCourts?: number): void
     addPlayoffRound(matchIds: MatchId[]): void
     setScore(matchId: MatchId, score?: { a: number; b: number }): void
     setScoresMany(scores: Array<{ matchId: MatchId; score: { a: number; b: number } }>): void

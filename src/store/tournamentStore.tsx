@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { generateSchedule } from '../domain/scheduler'
+import { generateSchedule, optimizeRoundsForFiltered } from '../domain/scheduler'
 import { seedKey } from '../domain/keys'
 import type { ClubId, Match, PlayerId, TournamentStateV2 } from '../domain/types'
 import { computeMatch } from '../domain/analytics'
@@ -543,6 +543,15 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       if (nextMatches.length === 0) return state
       return touch({ ...state, matches: nextMatches })
     }
+    case 'matches.rounds.optimize': {
+      if (state.matches.length === 0 || action.matchIds.length === 0) return state
+      const nextMatches = optimizeRoundsForFiltered({
+        allMatches: state.matches,
+        targetMatchIds: action.matchIds,
+        targetCourts: action.targetCourts,
+      })
+      return touch({ ...state, matches: nextMatches })
+    }
     case 'playoff.round.add': {
       if (state.matches.some((m) => (m.stage ?? 'REGULAR') === 'PLAYOFF')) return state
 
@@ -1043,6 +1052,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         dispatch({ type: 'division.seed.set', divisionId, clubId, eventType, seed, playerIds, profileId }),
       generateSchedule: () => dispatch({ type: 'schedule.generate' }),
       regenerateSchedule: () => dispatch({ type: 'schedule.regenerate' }),
+      optimizeRounds: (matchIds, targetCourts) => dispatch({ type: 'matches.rounds.optimize', matchIds, targetCourts }),
       addPlayoffRound: (matchIds) => dispatch({ type: 'playoff.round.add', matchIds }),
       setScore: (matchId, score) => dispatch({ type: 'match.score.set', matchId, score }),
       setScoresMany: (scores) => dispatch({ type: 'matches.scores.setMany', scores }),

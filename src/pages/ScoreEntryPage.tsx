@@ -339,6 +339,10 @@ export function ScoreEntryPage() {
   }, [filtered, sort, divisionCodeById, divisionNameById, clubLabel, playersById, state])
 
   const scheduleMissing = state.matches.length === 0
+  const optimizableFiltered = useMemo(
+    () => sorted.filter((m) => (m.stage ?? 'REGULAR') === 'REGULAR'),
+    [sorted],
+  )
   const filteredRegularMatches = useMemo(() => sorted.filter((m) => (m.stage ?? 'REGULAR') !== 'PLAYOFF'), [sorted])
   const allFilteredRegularScored = useMemo(() => {
     if (filteredRegularMatches.length === 0) return false
@@ -808,6 +812,49 @@ export function ScoreEntryPage() {
             }}
           >
             Generate schedule
+          </button>
+          <button
+            className={[
+              'rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900',
+              tournamentLocked || optimizableFiltered.length === 0 ? 'cursor-not-allowed opacity-50 hover:bg-transparent' : '',
+            ].join(' ')}
+            disabled={tournamentLocked || optimizableFiltered.length === 0}
+            onClick={() => {
+              if (optimizableFiltered.length === 0) {
+                alert('No regular matches in the current filter to optimize.')
+                return
+              }
+              const rawCourts = prompt(
+                'Optional: target number of courts to use per round.\n\nLeave blank to maximize automatically.',
+                '',
+              )
+              if (rawCourts == null) return
+              let targetCourts: number | undefined
+              const trimmed = rawCourts.trim()
+              if (trimmed.length) {
+                const n = Math.floor(Number(trimmed))
+                if (!Number.isFinite(n) || n <= 0) {
+                  alert('Courts must be a positive whole number.')
+                  return
+                }
+                targetCourts = n
+              }
+              if (
+                !confirm(
+                  `Optimize filtered rounds?\n\nThis will reorder ${optimizableFiltered.length} currently filtered regular match(es) to reduce player conflicts.\n\n${
+                    targetCourts ? `Target courts per round: ${targetCourts}\n\n` : ''
+                  }Only filtered matches are changed.\nScores and matches stay intact.\n\nContinue?`,
+                )
+              )
+                return
+              actions.optimizeRounds(
+                optimizableFiltered.map((m) => m.id),
+                targetCourts,
+              )
+            }}
+            title="Reorder rounds for better concurrent play"
+          >
+            Optimize rounds ({optimizableFiltered.length})
           </button>
           <button
             className={[
