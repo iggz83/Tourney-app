@@ -1073,22 +1073,7 @@ export function SetupPage() {
                 for (let i = 1; i <= w; i++) next.push({ eventType: 'WOMENS_DOUBLES', seed: i, label: `Women #${i}` })
                 for (let i = 1; i <= m; i++) next.push({ eventType: 'MENS_DOUBLES', seed: i, label: `Men #${i}` })
                 for (let i = 1; i <= x; i++) next.push({ eventType: 'MIXED_DOUBLES', seed: i, label: `Mixed #${i}` })
-
-                // Safety: preserve any event/seed already referenced by existing matches.
-                const byKey = new Map<string, (typeof next)[number]>(next.map((ev) => [`${ev.eventType}:${ev.seed}`, ev]))
-                const labelByKey = new Map<string, string>(seededEventsForDivision.map((ev) => [`${ev.eventType}:${ev.seed}`, ev.label]))
-                for (const match of state.matches.filter((m) => m.divisionId === divisionId)) {
-                  const k = `${match.eventType}:${match.seed}`
-                  if (byKey.has(k)) continue
-                  byKey.set(k, {
-                    eventType: match.eventType,
-                    seed: match.seed,
-                    label: labelByKey.get(k) ?? `${match.eventType} #${match.seed}`,
-                  })
-                }
-
-                const merged = [...byKey.values()]
-                const normalize = (arr: typeof merged) =>
+                const normalize = (arr: typeof next) =>
                   [...arr]
                     .map((ev) => ({
                       eventType: ev.eventType,
@@ -1102,7 +1087,7 @@ export function SetupPage() {
                       return a.seed - b.seed
                     })
                 const prevNorm = normalize(seededEventsForDivision)
-                const nextNorm = normalize(merged)
+                const nextNorm = normalize(next)
                 if (nextNorm.length === 0) {
                   setEventsNotice('No events to apply. Add at least one seed.')
                   return
@@ -1116,7 +1101,7 @@ export function SetupPage() {
                       x.label === nextNorm[i]!.label,
                   )
 
-                actions.setSeededEvents(divisionId, merged)
+                actions.setSeededEvents(divisionId, next)
                 if (same) {
                   setEventsNotice('No changes detected for this division.')
                 } else {
