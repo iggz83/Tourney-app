@@ -118,8 +118,10 @@ function highlightText(text: string, needleRaw: string) {
 
 export function ScoreEntryPage() {
   const { state, actions, dispatch } = useTournamentStore()
-  const [divisionId, setDivisionId] = useState<string>('all')
-  const [round, setRound] = useState<'all' | string>('all')
+  const [divisionFilters, setDivisionFilters] = useState<string[]>([])
+  const [divisionFilterOpen, setDivisionFilterOpen] = useState<boolean>(false)
+  const [roundFilters, setRoundFilters] = useState<string[]>([])
+  const [roundFilterOpen, setRoundFilterOpen] = useState<boolean>(false)
   const [eventFilters, setEventFilters] = useState<string[]>([])
   const [eventFilterOpen, setEventFilterOpen] = useState<boolean>(false)
   const [needsScoresOnly, setNeedsScoresOnly] = useState<boolean>(false)
@@ -131,6 +133,8 @@ export function ScoreEntryPage() {
   const [courtOverwrite, setCourtOverwrite] = useState<boolean>(false)
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
+  const divisionFilterRef = useRef<HTMLDetailsElement | null>(null)
+  const roundFilterRef = useRef<HTMLDetailsElement | null>(null)
   const eventFilterRef = useRef<HTMLDetailsElement | null>(null)
   const totalMatches = state.matches.length
   const tournamentLocked = Boolean(state.tournamentLockedAt)
@@ -177,7 +181,10 @@ export function ScoreEntryPage() {
 
   const baseFiltered = useMemo(() => {
     let ms = state.matches
-    if (divisionId !== 'all') ms = ms.filter((m) => m.divisionId === divisionId)
+    if (divisionFilters.length) {
+      const allowedDivisions = new Set(divisionFilters)
+      ms = ms.filter((m) => allowedDivisions.has(m.divisionId))
+    }
     if (eventFilters.length) {
       const allowed = new Set<string>()
       for (const v of eventFilters) {
@@ -245,7 +252,7 @@ export function ScoreEntryPage() {
     state.matches,
     state.divisionConfigs,
     state.divisions,
-    divisionId,
+    divisionFilters,
     eventFilters,
     team1,
     team2,
@@ -263,11 +270,15 @@ export function ScoreEntryPage() {
   }, [baseFiltered])
 
   const filtered = useMemo(() => {
-    if (round === 'all') return baseFiltered
-    const n = Number(round)
-    if (!Number.isFinite(n)) return baseFiltered
-    return baseFiltered.filter((m) => m.round === n)
-  }, [baseFiltered, round])
+    if (!roundFilters.length) return baseFiltered
+    const allowed = new Set<number>()
+    for (const r of roundFilters) {
+      const n = Number(r)
+      if (Number.isFinite(n)) allowed.add(n)
+    }
+    if (!allowed.size) return baseFiltered
+    return baseFiltered.filter((m) => allowed.has(m.round))
+  }, [baseFiltered, roundFilters])
 
   const divisionNameById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.name])), [state.divisions])
   const divisionCodeById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.code])), [state.divisions])
@@ -380,7 +391,7 @@ export function ScoreEntryPage() {
 
   useEffect(() => {
     if (!addMatchOpen) return
-    const div = divisionId !== 'all' ? divisionId : state.divisions[0]?.id ?? ''
+    const div = divisionFilters[0] ?? state.divisions[0]?.id ?? ''
     const a = state.clubs[0]?.id ?? ''
     const b = state.clubs[1]?.id ?? a
     setAddDivisionId(div)
@@ -391,7 +402,7 @@ export function ScoreEntryPage() {
     setAddA2('')
     setAddB1('')
     setAddB2('')
-  }, [addMatchOpen, defaultAddRound, divisionId, state.clubs, state.divisions])
+  }, [addMatchOpen, defaultAddRound, divisionFilters, state.clubs, state.divisions])
 
   const addPlayersForClub = useMemo(() => {
     const byClub = new Map<string, Array<(typeof state.players)[number]>>()
@@ -412,21 +423,27 @@ export function ScoreEntryPage() {
     return byClub
   }, [addDivisionId, state.players])
 
-  // Close the Event dropdown when clicking outside (or pressing Escape).
+  // Close filter dropdowns when clicking outside (or pressing Escape).
   useEffect(() => {
-    if (!eventFilterOpen) return
+    if (!eventFilterOpen && !divisionFilterOpen && !roundFilterOpen) return
 
     const onPointerDown = (e: PointerEvent) => {
-      const el = eventFilterRef.current
-      if (!el) return
       const target = e.target
       if (!(target instanceof Node)) return
-      if (el.contains(target)) return
+      const divEl = divisionFilterRef.current
+      const rndEl = roundFilterRef.current
+      const evtEl = eventFilterRef.current
+      if (divEl?.contains(target) || rndEl?.contains(target) || evtEl?.contains(target)) return
+      setDivisionFilterOpen(false)
+      setRoundFilterOpen(false)
       setEventFilterOpen(false)
     }
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setEventFilterOpen(false)
+      if (e.key !== 'Escape') return
+      setDivisionFilterOpen(false)
+      setRoundFilterOpen(false)
+      setEventFilterOpen(false)
     }
 
     // Use capture so we see the event before other handlers potentially stop propagation.
@@ -436,12 +453,19 @@ export function ScoreEntryPage() {
       document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('keydown', onKeyDown, true)
     }
-  }, [eventFilterOpen])
+  }, [divisionFilterOpen, eventFilterOpen, roundFilterOpen])
 
   function handlePrintFiltered() {
-    const divisionLabel =
-      divisionId === 'all' ? 'All divisions' : divisionNameById.get(divisionId) ?? divisionId
-    const roundLabel = round === 'all' ? 'All rounds' : `Round ${round}`
+    const divisionLabel = (() => {
+      if (!divisionFilters.length) return 'All divisions'
+      if (divisionFilters.length === 1) return divisionNameById.get(divisionFilters[0]!) ?? divisionFilters[0]!
+      return `${divisionFilters.length} selected`
+    })()
+    const roundLabel = (() => {
+      if (!roundFilters.length) return 'All rounds'
+      if (roundFilters.length === 1) return `Round ${roundFilters[0]}`
+      return `${roundFilters.length} selected`
+    })()
     const eventLabelFilter = (() => {
       if (!eventFilters.length) return 'All events'
       const byKey = new Map<string, string>(eventOptions.map((ev) => [`${ev.eventType}:${ev.seed}`, ev.label]))
@@ -1290,8 +1314,8 @@ export function ScoreEntryPage() {
             type="button"
             className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-900"
             onClick={() => {
-              setDivisionId('all')
-              setRound('all')
+              setDivisionFilters([])
+              setRoundFilters([])
               setEventFilters([])
               setTeam1('all')
               setTeam2('all')
@@ -1305,37 +1329,115 @@ export function ScoreEntryPage() {
           </button>
         </div>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-12">
-          <label className="text-sm text-slate-300 lg:col-span-3">
+          <div className="text-sm text-slate-300 lg:col-span-3">
             <div className="mb-1 text-xs text-slate-400">Division</div>
-            <select
-              className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
-              value={divisionId}
-              onChange={(e) => setDivisionId(e.target.value)}
-            >
-              <option value="all">All</option>
-              {state.divisions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            <details ref={divisionFilterRef} className="group relative" open={divisionFilterOpen}>
+              <summary
+                className="cursor-pointer list-none rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100 hover:bg-slate-950"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setDivisionFilterOpen((v) => !v)
+                }}
+              >
+                {divisionFilters.length === 0
+                  ? 'All divisions'
+                  : divisionFilters.length === 1
+                    ? divisionNameById.get(divisionFilters[0]!) ?? divisionFilters[0]
+                    : `${divisionFilters.length} selected`}
+                <span className="float-right text-slate-400 group-open:rotate-180">▾</span>
+              </summary>
+              <div className="absolute z-20 mt-1 w-full min-w-[220px] rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
+                <div className="max-h-56 overflow-auto pr-1">
+                  {state.divisions.map((d) => {
+                    const v = d.id
+                    const checked = divisionFilters.includes(v)
+                    return (
+                      <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-slate-200 hover:bg-slate-900">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-slate-200"
+                          checked={checked}
+                          onChange={(e) => {
+                            const nextChecked = e.target.checked
+                            setDivisionFilters((prev) => {
+                              if (nextChecked) return prev.includes(v) ? prev : [...prev, v]
+                              return prev.filter((x) => x !== v)
+                            })
+                          }}
+                        />
+                        <span className="truncate">{d.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-900"
+                    onClick={() => setDivisionFilters([])}
+                  >
+                    All
+                  </button>
+                  <div className="text-xs text-slate-400">{divisionFilters.length ? `${divisionFilters.length} selected` : 'All selected'}</div>
+                </div>
+              </div>
+            </details>
+          </div>
 
-          <label className="text-sm text-slate-300 lg:col-span-3">
+          <div className="text-sm text-slate-300 lg:col-span-3">
             <div className="mb-1 text-xs text-slate-400">Round</div>
-            <select
-              className="w-full rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100"
-              value={round}
-              onChange={(e) => setRound(e.target.value)}
-            >
-              <option value="all">All</option>
-              {availableRounds.map((r) => (
-                <option key={r} value={String(r)}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
+            <details ref={roundFilterRef} className="group relative" open={roundFilterOpen}>
+              <summary
+                className="cursor-pointer list-none rounded-md border border-slate-700 bg-slate-950/70 px-2 py-2 text-sm text-slate-100 hover:bg-slate-950"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setRoundFilterOpen((v) => !v)
+                }}
+              >
+                {roundFilters.length === 0
+                  ? 'All rounds'
+                  : roundFilters.length === 1
+                    ? `Round ${roundFilters[0]}`
+                    : `${roundFilters.length} selected`}
+                <span className="float-right text-slate-400 group-open:rotate-180">▾</span>
+              </summary>
+              <div className="absolute z-20 mt-1 w-full min-w-[220px] rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
+                <div className="max-h-56 overflow-auto pr-1">
+                  {availableRounds.map((r) => {
+                    const v = String(r)
+                    const checked = roundFilters.includes(v)
+                    return (
+                      <label key={v} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-slate-200 hover:bg-slate-900">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-slate-200"
+                          checked={checked}
+                          onChange={(e) => {
+                            const nextChecked = e.target.checked
+                            setRoundFilters((prev) => {
+                              if (nextChecked) return prev.includes(v) ? prev : [...prev, v]
+                              return prev.filter((x) => x !== v)
+                            })
+                          }}
+                        />
+                        <span className="truncate">Round {r}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-800 pt-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:bg-slate-900"
+                    onClick={() => setRoundFilters([])}
+                  >
+                    All
+                  </button>
+                  <div className="text-xs text-slate-400">{roundFilters.length ? `${roundFilters.length} selected` : 'All selected'}</div>
+                </div>
+              </div>
+            </details>
+          </div>
 
           <div className="text-sm text-slate-300 md:col-span-2 lg:col-span-6">
             <div className="mb-1 text-xs text-slate-400">Event</div>
