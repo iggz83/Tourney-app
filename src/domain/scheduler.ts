@@ -150,7 +150,7 @@ export function optimizeRoundsForFiltered(args: {
         }
       })
 
-    const maxAttempts = Math.min(700, Math.max(120, ordered.length * 10))
+    const maxAttempts = Math.min(1700, Math.max(120, ordered.length * 50))
     let bestRounds: number[][] | null = null
     let bestObjective: [number, number, number] | null = null // [rounds, underfilledRounds, slackSq]
 
