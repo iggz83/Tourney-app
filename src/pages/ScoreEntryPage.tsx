@@ -10,10 +10,16 @@ function displayPlayerName(p?: { name?: string | null; firstName?: string | null
   return getPlayerNameOr(p, '—')
 }
 
+function fallbackEventLabel(eventType: Match['eventType'], seed: number) {
+  if (eventType === 'WOMENS_DOUBLES') return `Women #${seed}`
+  if (eventType === 'MENS_DOUBLES') return `Men #${seed}`
+  return `Mixed #${seed}`
+}
+
 function eventLabel(match: Match, seededEvents: Array<{ eventType: Match['eventType']; seed: number; label: string }>) {
   const seedA = Math.max(1, Math.floor(Number(match.seedA ?? match.seed) || 1))
   const seedB = Math.max(1, Math.floor(Number(match.seedB ?? match.seed) || 1))
-  const labelA = seededEvents.find((e) => e.eventType === match.eventType && e.seed === seedA)?.label ?? `${match.eventType} #${seedA}`
+  const labelA = seededEvents.find((e) => e.eventType === match.eventType && e.seed === seedA)?.label ?? fallbackEventLabel(match.eventType, seedA)
   if (seedA === seedB) return labelA
   const labelB = seededEvents.find((e) => e.eventType === match.eventType && e.seed === seedB)?.label ?? `#${seedB}`
   return `${labelA} vs ${labelB}`
@@ -355,11 +361,14 @@ export function ScoreEntryPage() {
 
   // Manual match UI (Add match)
   const [addMatchOpen, setAddMatchOpen] = useState<boolean>(false)
-  const maxExistingRound = useMemo(() => {
-    let max = 1
-    for (const m of state.matches) max = Math.max(max, Number(m.round) || 0)
-    return max || 1
-  }, [state.matches])
+  const defaultAddRound = useMemo(() => {
+    let filteredMax = 0
+    for (const m of sorted) filteredMax = Math.max(filteredMax, Number(m.round) || 0)
+    if (filteredMax > 0) return filteredMax + 1
+    let globalMax = 0
+    for (const m of state.matches) globalMax = Math.max(globalMax, Number(m.round) || 0)
+    return Math.max(1, globalMax + 1)
+  }, [sorted, state.matches])
   const [addDivisionId, setAddDivisionId] = useState<string>('')
   const [addRound, setAddRound] = useState<string>('')
   const [addClubA, setAddClubA] = useState<string>('')
@@ -375,14 +384,14 @@ export function ScoreEntryPage() {
     const a = state.clubs[0]?.id ?? ''
     const b = state.clubs[1]?.id ?? a
     setAddDivisionId(div)
-    setAddRound(String(maxExistingRound))
+    setAddRound(String(defaultAddRound))
     setAddClubA(a)
     setAddClubB(b)
     setAddA1('')
     setAddA2('')
     setAddB1('')
     setAddB2('')
-  }, [addMatchOpen, divisionId, maxExistingRound, state.clubs, state.divisions])
+  }, [addMatchOpen, defaultAddRound, divisionId, state.clubs, state.divisions])
 
   const addPlayersForClub = useMemo(() => {
     const byClub = new Map<string, Array<(typeof state.players)[number]>>()
@@ -1041,7 +1050,7 @@ export function ScoreEntryPage() {
                   />
                 </label>
 
-                <div className="flex items-end text-xs text-slate-500">Default: current max round ({maxExistingRound}).</div>
+                <div className="flex items-end text-xs text-slate-500">Default: highest filtered round + 1 ({defaultAddRound}).</div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
