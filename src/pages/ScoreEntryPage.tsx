@@ -1648,20 +1648,20 @@ export function ScoreEntryPage() {
                 <div className="rounded-xl border border-slate-800">
                   <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2">
                     <div className="text-sm font-semibold text-slate-200">
-                      {showAllPlayersMetrics ? 'Most-Used Players (All)' : 'Top 5 Most-Used Players'}
+                      {showAllPlayersMetrics ? 'Most-Used Players (All)' : 'Top 10 Most-Used Players'}
                     </div>
                     <button
                       className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
                       onClick={() => setShowAllPlayersMetrics((v) => !v)}
                     >
-                      {showAllPlayersMetrics ? 'Show top 5' : 'Show all players'}
+                      {showAllPlayersMetrics ? 'Show top 10' : 'Show all players'}
                     </button>
                   </div>
                   <div className="divide-y divide-slate-800">
-                    {(showAllPlayersMetrics ? metrics.mostUsedPlayers : metrics.mostUsedPlayers.slice(0, 5)).length === 0 ? (
+                    {(showAllPlayersMetrics ? metrics.mostUsedPlayers : metrics.mostUsedPlayers.slice(0, 10)).length === 0 ? (
                       <div className="px-3 py-3 text-sm text-slate-400">No named players with scheduled games yet.</div>
                     ) : (
-                      (showAllPlayersMetrics ? metrics.mostUsedPlayers : metrics.mostUsedPlayers.slice(0, 5)).map((p) => (
+                      (showAllPlayersMetrics ? metrics.mostUsedPlayers : metrics.mostUsedPlayers.slice(0, 10)).map((p) => (
                         <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                           <div className="min-w-0">
                             <div className="truncate font-medium text-slate-100">{p.name}</div>
@@ -1678,13 +1678,13 @@ export function ScoreEntryPage() {
                 </div>
                 <div className="rounded-xl border border-slate-800">
                   <div className="border-b border-slate-800 px-3 py-2 text-sm font-semibold text-slate-200">
-                    {showAllPlayersMetrics ? 'Least-Used Active Players (All)' : 'Top 5 Least-Used Active Players'}
+                    {showAllPlayersMetrics ? 'Least-Used Active Players (All)' : 'Top 10 Least-Used Active Players'}
                   </div>
                   <div className="divide-y divide-slate-800">
-                    {(showAllPlayersMetrics ? metrics.leastUsedPlayers : metrics.leastUsedPlayers.slice(0, 5)).length === 0 ? (
+                    {(showAllPlayersMetrics ? metrics.leastUsedPlayers : metrics.leastUsedPlayers.slice(0, 10)).length === 0 ? (
                       <div className="px-3 py-3 text-sm text-slate-400">No named players with scheduled games yet.</div>
                     ) : (
-                      (showAllPlayersMetrics ? metrics.leastUsedPlayers : metrics.leastUsedPlayers.slice(0, 5)).map((p) => (
+                      (showAllPlayersMetrics ? metrics.leastUsedPlayers : metrics.leastUsedPlayers.slice(0, 10)).map((p) => (
                         <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                           <div className="min-w-0">
                             <div className="truncate font-medium text-slate-100">{p.name}</div>
