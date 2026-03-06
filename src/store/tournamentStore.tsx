@@ -124,12 +124,15 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return touch({ ...state, tournamentLockedAt: null, tournamentLockRev: nextRev })
     }
     case 'tournament.name.set': {
+      if (state.tournamentName === action.name) return state
       return touch({ ...state, tournamentName: action.name })
     }
     case 'tournament.password.set': {
+      if (state.tournamentPasswordSalt === action.salt && state.tournamentPasswordHash === action.hash) return state
       return touch({ ...state, tournamentPasswordSalt: action.salt, tournamentPasswordHash: action.hash })
     }
     case 'tournament.password.clear': {
+      if (!state.tournamentPasswordSalt && !state.tournamentPasswordHash) return state
       return touch({ ...state, tournamentPasswordSalt: null, tournamentPasswordHash: null })
     }
     case 'club.add': {
@@ -208,13 +211,24 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return touch({ ...state, clubs, players, lineupProfiles, divisionConfigs, matches })
     }
     case 'club.name.set': {
+      let changed = false
       const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, name: action.name } : c))
+      for (let i = 0; i < state.clubs.length; i++) {
+        if (state.clubs[i]?.name !== clubs[i]?.name) {
+          changed = true
+          break
+        }
+      }
+      if (!changed) return state
       return touch({ ...state, clubs })
     }
     case 'club.code.set': {
       const nextCode = action.code.trim()
       if (!nextCode.length) return state
       if (state.clubs.some((c) => c.id !== action.clubId && c.code === nextCode)) return state
+      const target = state.clubs.find((c) => c.id === action.clubId)
+      if (!target) return state
+      if (target.code === nextCode) return state
       const clubs = state.clubs.map((c) => (c.id === action.clubId ? { ...c, code: nextCode } : c))
       return touch({ ...state, clubs })
     }
@@ -257,12 +271,17 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
     case 'division.update': {
       const divisionId = action.divisionId
       if (!divisionId) return state
+      const current = state.divisions.find((d) => d.id === divisionId)
+      if (!current) return state
+      const nextCode = action.code != null ? String(action.code) : current.code
+      const nextName = action.name != null ? String(action.name) : current.name
+      if (nextCode === current.code && nextName === current.name) return state
       const divisions = state.divisions.map((d) => {
         if (d.id !== divisionId) return d
         return {
           ...d,
-          code: action.code != null ? String(action.code) : d.code,
-          name: action.name != null ? String(action.name) : d.name,
+          code: nextCode,
+          name: nextName,
         }
       })
       return touch({ ...state, divisions })
@@ -315,6 +334,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const profileId = action.profileId.trim()
       const name = action.name.trim()
       if (!profileId.length) return state
+      const current = state.lineupProfiles.find((p) => p.id === profileId)
+      if (!current) return state
+      if ((name || current.name) === current.name) return state
       const lineupProfiles = state.lineupProfiles.map((p) => (p.id === profileId ? { ...p, name: name || p.name } : p))
       return touch({ ...state, lineupProfiles })
     }
@@ -335,6 +357,7 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const profileId = action.profileId.trim()
       if (!profileId.length) return state
       if (!state.lineupProfiles.some((p) => p.id === profileId)) return state
+      if (state.defaultLineupProfileId === profileId) return state
       const defaultProfile = state.lineupProfiles.find((p) => p.id === profileId) ?? state.lineupProfiles[0]!
       return touch({ ...state, defaultLineupProfileId: profileId, divisionConfigs: defaultProfile.divisionConfigs })
     }
@@ -405,6 +428,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return touch({ ...state, players, divisionConfigs, lineupProfiles })
     }
     case 'player.name.set': {
+      const current = state.players.find((p) => p.id === action.playerId)
+      if (!current) return state
+      if (current.name === action.name) return state
       const players = state.players.map((p) =>
         p.id === action.playerId ? { ...p, name: action.name } : p,
       )
@@ -454,16 +480,21 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
     }
     case 'division.autoseed': {
       const targetProfileId = action.profileId?.trim() || state.defaultLineupProfileId
+      let anyChanged = false
 
       const autoSeedDivisionConfigs = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
         divisionConfigs.map((dc) => {
           if (dc.divisionId !== action.divisionId) return dc
 
           const applyToClubIds = action.clubId ? [action.clubId] : state.clubs.map((c) => c.id)
-          const nextSeedsByClub = { ...(dc.seedsByClub ?? {}) }
+          const prevSeedsByClub = dc.seedsByClub ?? {}
+          const nextSeedsByClub = { ...prevSeedsByClub }
+          let divisionChanged = false
 
           for (const clubId of applyToClubIds) {
-            const clubRecord = { ...(nextSeedsByClub[clubId] ?? {}) } as Record<string, { playerIds: [PlayerId | null, PlayerId | null] }>
+            const prevClubRecord = (prevSeedsByClub[clubId] ?? {}) as Record<string, { playerIds: [PlayerId | null, PlayerId | null] }>
+            const clubRecord = { ...prevClubRecord } as Record<string, { playerIds: [PlayerId | null, PlayerId | null] }>
+            let clubChanged = false
 
             const women = state.players.filter((p) => p.divisionId === action.divisionId && p.clubId === clubId && p.gender === 'F').slice()
             const men = state.players.filter((p) => p.divisionId === action.divisionId && p.clubId === clubId && p.gender === 'M').slice()
@@ -480,20 +511,33 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
               const uniq = [...new Set(seeds)].sort((a, b) => a - b)
               for (let idx = 0; idx < uniq.length; idx++) {
                 const seed = uniq[idx]!
+                let nextPair: [PlayerId | null, PlayerId | null]
                 if (eventType === 'WOMENS_DOUBLES') {
-                  clubRecord[seedKey(eventType, seed)] = { playerIds: [women[idx * 2]?.id ?? null, women[idx * 2 + 1]?.id ?? null] }
+                  nextPair = [women[idx * 2]?.id ?? null, women[idx * 2 + 1]?.id ?? null]
                 } else if (eventType === 'MENS_DOUBLES') {
-                  clubRecord[seedKey(eventType, seed)] = { playerIds: [men[idx * 2]?.id ?? null, men[idx * 2 + 1]?.id ?? null] }
+                  nextPair = [men[idx * 2]?.id ?? null, men[idx * 2 + 1]?.id ?? null]
                 } else {
                   // Mixed seed N defaults to woman N + man N.
-                  clubRecord[seedKey(eventType, seed)] = { playerIds: [women[idx]?.id ?? null, men[idx]?.id ?? null] }
+                  nextPair = [women[idx]?.id ?? null, men[idx]?.id ?? null]
                 }
+
+                const k = seedKey(eventType, seed)
+                const prevPair = prevClubRecord[k]?.playerIds ?? [null, null]
+                if (prevPair[0] !== nextPair[0] || prevPair[1] !== nextPair[1]) {
+                  clubChanged = true
+                }
+                clubRecord[k] = { playerIds: nextPair }
               }
             }
 
-            nextSeedsByClub[clubId] = clubRecord
+            if (clubChanged) {
+              nextSeedsByClub[clubId] = clubRecord
+              divisionChanged = true
+            }
           }
 
+          if (!divisionChanged) return dc
+          anyChanged = true
           return { ...dc, seedsByClub: nextSeedsByClub }
         })
 
@@ -503,9 +547,13 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       const defaultProfile = lineupProfiles.find((p) => p.id === state.defaultLineupProfileId) ?? lineupProfiles[0]!
       const divisionConfigs =
         state.defaultLineupProfileId === targetProfileId ? autoSeedDivisionConfigs(state.divisionConfigs) : defaultProfile.divisionConfigs
+      if (!anyChanged) return state
       return touch({ ...state, lineupProfiles, divisionConfigs })
     }
     case 'division.club.enabled.set': {
+      const currentDc = state.divisionConfigs.find((dc) => dc.divisionId === action.divisionId)
+      const currentEnabled = currentDc?.clubEnabled?.[action.clubId] ?? false
+      if (currentEnabled === action.enabled) return state
       const updateEnabled = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
         divisionConfigs.map((dc) => {
           if (dc.divisionId !== action.divisionId) return dc
@@ -518,6 +566,9 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
     }
     case 'division.seed.set': {
       const targetProfileId = action.profileId?.trim() || state.defaultLineupProfileId
+      const currentDc = state.divisionConfigs.find((dc) => dc.divisionId === action.divisionId)
+      const currentPair = currentDc?.seedsByClub?.[action.clubId]?.[seedKey(action.eventType, action.seed)]?.playerIds ?? [null, null]
+      if (currentPair[0] === action.playerIds[0] && currentPair[1] === action.playerIds[1]) return state
       const applySeed = (divisionConfigs: TournamentStateV2['divisionConfigs']) =>
         divisionConfigs.map((dc) => {
           if (dc.divisionId !== action.divisionId) return dc
@@ -662,6 +713,8 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return action.source === 'remote' ? { ...state, matches } : touch({ ...state, matches })
     }
     case 'matches.scores.clearAll': {
+      const hasAnyScore = state.matches.some((m) => m.score || m.completedAt)
+      if (!hasAnyScore) return state
       const matches = state.matches.map((m) => ({ ...m, score: undefined, completedAt: undefined }))
       return touch({ ...state, matches })
     }
@@ -679,19 +732,32 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
     case 'matches.courts.assign': {
       if (!action.assignments.length) return state
       const byId = new Map(action.assignments.map((a) => [a.matchId, a.court] as const))
+      let changed = false
       const matches = state.matches.map((m) => {
         const nextCourt = byId.get(m.id)
         if (nextCourt == null) return m
         if (!action.overwrite && m.court > 0) return m
+        if (m.court !== nextCourt) changed = true
         return { ...m, court: nextCourt }
       })
+      if (!changed) return state
       return touch({ ...state, matches })
     }
     case 'match.unlock': {
+      const current = state.matches.find((m) => m.id === action.matchId)
+      if (!current) return state
+      if (!current.completedAt) return state
       const matches = state.matches.map((m) => (m.id === action.matchId ? { ...m, completedAt: undefined } : m))
       return touch({ ...state, matches })
     }
     case 'match.score.set': {
+      const current = state.matches.find((m) => m.id === action.matchId)
+      if (!current) return state
+      if (!action.score) {
+        if (!current.score && !current.completedAt) return state
+      } else if (current.score?.a === action.score.a && current.score?.b === action.score.b && current.completedAt) {
+        return state
+      }
       const matches = state.matches.map((m) => {
         if (m.id !== action.matchId) return m
         if (!action.score) return { ...m, score: undefined, completedAt: undefined }
@@ -756,15 +822,21 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   const prevScheduleSigRef = useRef<string | null>(null)
   const prevScoresRef = useRef<Map<string, string>>(new Map())
 
-  function trackCloudWrite(updatedAt: string, p: Promise<unknown>) {
+  function trackCloudWrite(tid: string, updatedAt: string, p: Promise<unknown>) {
     setInFlight((n) => n + 1)
     void p
       .then(() => {
+        if (tidRef.current !== tid) return
         setSyncError(null)
         setLastSyncedAt(new Date().toISOString())
-        setLastSyncedUpdatedAt(updatedAt)
+        setLastSyncedUpdatedAt((prev) => {
+          if (!prev) return updatedAt
+          return updatedAt > prev ? updatedAt : prev
+        })
       })
       .catch((e) => {
+        if (tidRef.current !== tid) return
+        if (updatedAt < stateUpdatedAtRef.current) return
         setSyncError(e instanceof Error ? e.message : 'Cloud sync failed')
       })
       .finally(() => {
@@ -954,13 +1026,13 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
 
           // Ensure cloud has core; if remote core is missing, push local core.
           if (!remoteCore) {
-            trackCloudWrite(local.updatedAt, upsertTournamentCoreState(tid, { ...stripLegacyNameFieldsForPersist(local), matches: [] }))
+            trackCloudWrite(tid, local.updatedAt, upsertTournamentCoreState(tid, { ...stripLegacyNameFieldsForPersist(local), matches: [] }))
           }
 
           // Ensure cloud has schedule rows; ONLY do this for a brand-new tournament row.
           // (Otherwise, switching tids could accidentally push the previous tournament's schedule.)
           if (!remoteCore && remoteMatches.length === 0 && local.matches.length > 0) {
-            trackCloudWrite(local.updatedAt, upsertTournamentMatches(tid, local.matches))
+            trackCloudWrite(tid, local.updatedAt, upsertTournamentMatches(tid, local.matches))
           }
         } catch {
           // ignore fetch/init issues; realtime may still work
@@ -1040,7 +1112,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     if (prevCoreSigRef.current !== coreSig) {
       prevCoreSigRef.current = coreSig
       // keep cloud core small; matches are in tournament_matches
-      trackCloudWrite(state.updatedAt, upsertTournamentCoreState(tid, { ...stripLegacyNameFieldsForPersist(state), matches: [] }))
+      trackCloudWrite(tid, state.updatedAt, upsertTournamentCoreState(tid, { ...stripLegacyNameFieldsForPersist(state), matches: [] }))
     }
 
     // Schedule updates (upsert all matches when schedule structure changes)
@@ -1050,7 +1122,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     const schedSig = scheduleSignature(state.matches)
     if (prevScheduleSigRef.current !== schedSig) {
       prevScheduleSigRef.current = schedSig
-      trackCloudWrite(state.updatedAt, upsertTournamentMatches(tid, state.matches))
+      trackCloudWrite(tid, state.updatedAt, upsertTournamentMatches(tid, state.matches))
     }
 
     // Score updates (per match row)
@@ -1068,6 +1140,7 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     prevScoresRef.current = nextScores
     if (scoreWrites.length) {
       trackCloudWrite(
+        tid,
         state.updatedAt,
         Promise.all(scoreWrites).then(() => {}),
       )
