@@ -373,7 +373,14 @@ export function ScoreEntryPage() {
   }, [filteredRegularMatches])
   const pendingFilteredDraftIds = useMemo(() => {
     const visible = new Set(sorted.map((m) => m.id))
-    return Object.keys(drafts).filter((id) => visible.has(id))
+    return Object.entries(drafts)
+      .filter(([id, d]) => {
+        if (!visible.has(id)) return false
+        const aHas = (d?.a ?? '').trim().length > 0
+        const bHas = (d?.b ?? '').trim().length > 0
+        return aHas || bHas
+      })
+      .map(([id]) => id)
   }, [drafts, sorted])
 
   // Manual match UI (Add match)
@@ -1804,7 +1811,11 @@ export function ScoreEntryPage() {
                       onClick={() => {
                         if (!confirm(`Reset score for ${rowId}?`)) return
                         actions.setScore(m.id, undefined)
-                        setDrafts((prev) => ({ ...prev, [m.id]: { a: '', b: '' } }))
+                        setDrafts((prev) => {
+                          const next = { ...prev }
+                          delete next[m.id]
+                          return next
+                        })
                       }}
                     >
                       Reset
