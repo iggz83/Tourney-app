@@ -129,6 +129,7 @@ export function ScoreEntryPage() {
   const [team2, setTeam2] = useState<string>('all')
   const [quickSearch, setQuickSearch] = useState<string>('')
   const [fullLineupsOnly, setFullLineupsOnly] = useState<boolean>(false)
+  const [missingPlayersOnly, setMissingPlayersOnly] = useState<boolean>(false)
   const [courtList, setCourtList] = useState<string>('')
   const [courtOverwrite, setCourtOverwrite] = useState<boolean>(false)
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
@@ -215,6 +216,9 @@ export function ScoreEntryPage() {
     if (fullLineupsOnly) {
       ms = ms.filter(hasFullLineup)
     }
+    if (missingPlayersOnly) {
+      ms = ms.filter((m) => !hasFullLineup(m))
+    }
     const q = quickSearch.trim().toLowerCase()
     if (q.length) {
       const divisionNameById = new Map(state.divisions.map((d) => [d.id, d.name]))
@@ -262,6 +266,7 @@ export function ScoreEntryPage() {
     team2,
     needsScoresOnly,
     fullLineupsOnly,
+    missingPlayersOnly,
     quickSearch,
     playersById,
     hasFullLineup,
@@ -1347,6 +1352,7 @@ export function ScoreEntryPage() {
               setTeam2('all')
               setNeedsScoresOnly(false)
               setFullLineupsOnly(false)
+              setMissingPlayersOnly(false)
               setQuickSearch('')
             }}
             title="Reset all filters"
@@ -1570,9 +1576,26 @@ export function ScoreEntryPage() {
                   type="checkbox"
                   className="h-4 w-4 accent-slate-200"
                   checked={fullLineupsOnly}
-                  onChange={(e) => setFullLineupsOnly(e.target.checked)}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setFullLineupsOnly(checked)
+                    if (checked) setMissingPlayersOnly(false)
+                  }}
                 />
                 <span className="text-sm">Full lineups</span>
+              </label>
+              <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-2 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-slate-200"
+                  checked={missingPlayersOnly}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setMissingPlayersOnly(checked)
+                    if (checked) setFullLineupsOnly(false)
+                  }}
+                />
+                <span className="text-sm">Missing Players</span>
               </label>
             </div>
           </div>
