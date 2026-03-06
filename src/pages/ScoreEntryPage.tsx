@@ -225,6 +225,10 @@ export function ScoreEntryPage() {
         const bPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubB })
         const aNames = aPair ? aPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
         const bNames = bPair ? bPair.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
+        const aTeam = clubCodeById.get(m.clubA) ?? m.clubA
+        const bTeam = clubCodeById.get(m.clubB) ?? m.clubB
+        const playersLineA = `${aTeam}: ${aNames}`
+        const playersLineB = `${bTeam}: ${bNames}`
         const hay = [
           divisionNameById.get(m.divisionId) ?? m.divisionId,
           divisionCodeById.get(m.divisionId) ?? '',
@@ -239,6 +243,8 @@ export function ScoreEntryPage() {
           `${clubCodeById.get(m.clubA) ?? m.clubA} vs ${clubCodeById.get(m.clubB) ?? m.clubB}`,
           aNames,
           bNames,
+          playersLineA,
+          playersLineB,
           `${aNames} | ${bNames}`,
           m.score ? `${m.score.a}-${m.score.b}` : '',
         ]
@@ -339,7 +345,9 @@ export function ScoreEntryPage() {
           const bNamesA = bPairA ? bPairA.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
           const aNamesB = aPairB ? aPairB.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
           const bNamesB = bPairB ? bPairB.map((id) => displayPlayerName(playersById.get(id))).join(' / ') : '—'
-          res = cmp(`${aNamesA} | ${bNamesA}`, `${aNamesB} | ${bNamesB}`)
+          const playersA = `${clubLabel.get(a.clubA) ?? a.clubA}: ${aNamesA} | ${clubLabel.get(a.clubB) ?? a.clubB}: ${bNamesA}`
+          const playersB = `${clubLabel.get(b.clubA) ?? b.clubA}: ${aNamesB} | ${clubLabel.get(b.clubB) ?? b.clubB}: ${bNamesB}`
+          res = cmp(playersA, playersB)
           break
         }
         case 'score':
@@ -490,7 +498,8 @@ export function ScoreEntryPage() {
         )}</span>`
         const division = divisionNameById.get(m.divisionId) ?? m.divisionId
         const event = eventLabel(m, getSeededEventsForDivision(state, m.divisionId))
-        const players = `${aNames} | ${bNames}`
+        const playersLineA = `${clubLabel.get(m.clubA) ?? m.clubA}: ${aNames}`
+        const playersLineB = `${clubLabel.get(m.clubB) ?? m.clubB}: ${bNames}`
 
         const scoreHtml = `<div class="scoreBoxes">
   <div class="boxRow">
@@ -511,7 +520,7 @@ export function ScoreEntryPage() {
   <td>${escapeHtml(division)}</td>
   <td>${escapeHtml(event)}</td>
   <td>${matchHtml}</td>
-  <td>${escapeHtml(players)}</td>
+  <td><div class="playersLines"><div>${escapeHtml(playersLineA)}</div><div>${escapeHtml(playersLineB)}</div></div></td>
   <td>${scoreHtml}</td>
 </tr>`
       })
@@ -544,6 +553,7 @@ export function ScoreEntryPage() {
       .teamTag { font-weight: 700; font-size: 11px; color: #0f172a; }
       .vs { color: #64748b; }
       .serveFirst { font-weight: 900; }
+      .playersLines { line-height: 1.35; }
       .box { display: inline-block; width: 40px; height: 28px; border: 2px solid #0f172a; border-radius: 4px; text-align: center; line-height: 26px; font-weight: 700; font-size: 13px; }
       @media print { body { margin: 0.35in; } }
     </style>
@@ -1658,7 +1668,8 @@ export function ScoreEntryPage() {
             const eventText = eventLabel(m, getSeededEventsForDivision(state, m.divisionId))
             const clubAText = clubLabel.get(m.clubA) ?? m.clubA
             const clubBText = clubLabel.get(m.clubB) ?? m.clubB
-            const playersText = `${aNames} | ${bNames}`
+            const playersLineA = `${clubAText}: ${aNames}`
+            const playersLineB = `${clubBText}: ${bNames}`
             const isPlayoff = (m.stage ?? 'REGULAR') === 'PLAYOFF'
 
             return (
@@ -1689,8 +1700,9 @@ export function ScoreEntryPage() {
                   </div>
                 </div>
                 <div className="min-w-0 overflow-hidden">
-                  <div className="truncate text-xs text-slate-300">
-                    {highlightText(playersText, highlightNeedle)}
+                  <div className="space-y-0.5 text-xs text-slate-300">
+                    <div className="truncate">{highlightText(playersLineA, highlightNeedle)}</div>
+                    <div className="truncate">{highlightText(playersLineB, highlightNeedle)}</div>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
