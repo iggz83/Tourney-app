@@ -531,11 +531,12 @@ export function ScoreEntryPage() {
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
       th, td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; font-size: 12px; }
       th { background: #f1f5f9; text-align: left; }
-      td:nth-child(1) { width: 44px; }
-      td:nth-child(2) { width: 56px; }
+      th:nth-child(1), td:nth-child(1) { width: 36px; }
+      th:nth-child(2), td:nth-child(2) { width: 44px; }
       td:nth-child(3) { width: 120px; }
       td:nth-child(4) { width: 110px; }
       td:nth-child(5) { width: 120px; }
+      th:nth-child(6), td:nth-child(6) { width: 300px; }
       td:nth-child(7) { width: 130px; }
       .small { color: #64748b; }
       .scoreBoxes { display: grid; gap: 4px; }
