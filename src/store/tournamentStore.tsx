@@ -737,9 +737,12 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
   const [inFlight, setInFlight] = useState(0)
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const [lastSyncedUpdatedAt, setLastSyncedUpdatedAt] = useState<string | null>(null)
+  const [reconnectTick, setReconnectTick] = useState(0)
   const isApplyingRemote = useRef(false)
   const lastSentAt = useRef<string | null>(null)
   const connRef = useRef<ReturnType<typeof connectCloudSync> | null>(null)
+  const reconnectAttemptRef = useRef(0)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stateUpdatedAtRef = useRef<string>(state.updatedAt)
   const stateRef = useRef<TournamentStateV2>(state)
   const tidRef = useRef<string | null>(null)
@@ -781,6 +784,12 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     stateUpdatedAtRef.current = state.updatedAt
   }, [state.updatedAt])
 
+  function clearReconnectTimer() {
+    if (reconnectTimerRef.current == null) return
+    clearTimeout(reconnectTimerRef.current)
+    reconnectTimerRef.current = null
+  }
+
   // Optional cloud sync (Supabase): enabled when ?tid=<uuid> (or cloud=1) is present.
   useEffect(() => {
     const enabled = shouldEnableCloudSync()
@@ -791,6 +800,8 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
       connRef.current?.close()
       connRef.current = null
       tidRef.current = null
+      clearReconnectTimer()
+      reconnectAttemptRef.current = 0
       setSyncStatus('disabled')
       setSyncError(null)
       setInFlight(0)
@@ -803,6 +814,8 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
     if (tidRef.current && tidRef.current !== tid) {
       connRef.current?.close()
       connRef.current = null
+      clearReconnectTimer()
+      reconnectAttemptRef.current = 0
       lastSentAt.current = null
       prevCoreSigRef.current = null
       prevScheduleSigRef.current = null
@@ -821,6 +834,23 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
 
     let cancelled = false
 
+    const queueReconnect = () => {
+      if (cancelled) return
+      if (!shouldEnableCloudSync()) return
+      if (reconnectTimerRef.current != null) return
+
+      const attempt = reconnectAttemptRef.current + 1
+      reconnectAttemptRef.current = attempt
+      const delayMs = Math.min(30000, 1000 * 2 ** Math.max(0, attempt - 1))
+      setSyncError(`Connection lost. Retrying in ${Math.ceil(delayMs / 1000)}s…`)
+
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null
+        if (cancelled) return
+        setReconnectTick((n) => n + 1)
+      }, delayMs)
+    }
+
     ;(async () => {
       try {
         await ensureTournamentRow(tid)
@@ -828,7 +858,21 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
 
         const conn = connectCloudSync({
           tid,
-          onStatus: setSyncStatus,
+          onStatus: (s) => {
+            setSyncStatus(s)
+            if (s === 'connected') {
+              clearReconnectTimer()
+              reconnectAttemptRef.current = 0
+              setSyncError(null)
+              return
+            }
+
+            if (s === 'error') {
+              connRef.current?.close()
+              connRef.current = null
+              queueReconnect()
+            }
+          },
           onRemoteCoreState: (remote) => {
             // last-write-wins for core config (only once we've hydrated for this tid).
             // When switching tid, we MUST allow older tournaments to overwrite the current in-memory state.
@@ -923,16 +967,18 @@ export function TournamentStoreProvider({ children }: { children: React.ReactNod
         }
       } catch {
         setSyncStatus('error')
+        queueReconnect()
       }
     })()
 
     return () => {
       cancelled = true
+      clearReconnectTimer()
       connRef.current?.close()
       connRef.current = null
       tidRef.current = null
     }
-  }, [location.key, location.search, location.hash])
+  }, [location.key, location.search, location.hash, reconnectTick])
 
   function coreSignature(s: TournamentStateV2) {
     return JSON.stringify({

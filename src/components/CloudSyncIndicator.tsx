@@ -40,7 +40,7 @@ export function CloudSyncIndicator() {
     if (cloud.status === 'error') {
       return {
         label: 'Cloud: Error',
-        detail: cloud.error ? 'Tap Setup to retry' : '',
+        detail: cloud.error ?? '',
         klass: 'border-red-900/60 bg-red-950/30 text-red-200',
       }
     }
