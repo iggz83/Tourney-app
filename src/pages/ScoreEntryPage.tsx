@@ -373,12 +373,22 @@ export function ScoreEntryPage() {
   }, [filteredRegularMatches])
   const pendingFilteredDraftIds = useMemo(() => {
     const visible = new Set(sorted.map((m) => m.id))
+    const visibleMatchesById = new Map(sorted.map((m) => [m.id, m] as const))
     return Object.entries(drafts)
       .filter(([id, d]) => {
         if (!visible.has(id)) return false
+        const m = visibleMatchesById.get(id)
+        if (!m) return false
+
+        const savedA = m.score?.a?.toString() ?? ''
+        const savedB = m.score?.b?.toString() ?? ''
+        const draftA = d?.a ?? ''
+        const draftB = d?.b ?? ''
+
         const aHas = (d?.a ?? '').trim().length > 0
         const bHas = (d?.b ?? '').trim().length > 0
-        return aHas || bHas
+        const differsFromSaved = draftA !== savedA || draftB !== savedB
+        return (aHas || bHas) && differsFromSaved
       })
       .map(([id]) => id)
   }, [drafts, sorted])
