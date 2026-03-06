@@ -255,9 +255,7 @@ export function ScoreEntryPage() {
     }
     return [...ms].sort(byMatchOrder)
   }, [
-    state.matches,
-    state.divisionConfigs,
-    state.divisions,
+    state,
     divisionFilters,
     eventFilters,
     team1,
@@ -429,7 +427,7 @@ export function ScoreEntryPage() {
       byClub.set(k, arr)
     }
     return byClub
-  }, [addDivisionId, state.players])
+  }, [addDivisionId, state])
 
   // Close filter dropdowns when clicking outside (or pressing Escape).
   useEffect(() => {
@@ -1357,7 +1355,7 @@ export function ScoreEntryPage() {
                     : `${divisionFilters.length} selected`}
                 <span className="float-right text-slate-400 group-open:rotate-180">▾</span>
               </summary>
-              <div className="absolute z-20 mt-1 w-full min-w-[220px] rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
+              <div className="absolute z-20 mt-1 w-full min-w-55 rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
                 <div className="max-h-56 overflow-auto pr-1">
                   {state.divisions.map((d) => {
                     const v = d.id
@@ -1412,7 +1410,7 @@ export function ScoreEntryPage() {
                     : `${roundFilters.length} selected`}
                 <span className="float-right text-slate-400 group-open:rotate-180">▾</span>
               </summary>
-              <div className="absolute z-20 mt-1 w-full min-w-[220px] rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
+              <div className="absolute z-20 mt-1 w-full min-w-55 rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
                 <div className="max-h-56 overflow-auto pr-1">
                   {availableRounds.map((r) => {
                     const v = String(r)
@@ -1468,7 +1466,7 @@ export function ScoreEntryPage() {
                     : `${eventFilters.length} selected`}
                 <span className="float-right text-slate-400 group-open:rotate-180">▾</span>
               </summary>
-              <div className="absolute z-20 mt-1 w-full min-w-[220px] rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
+              <div className="absolute z-20 mt-1 w-full min-w-55 rounded-md border border-slate-700 bg-slate-950 p-2 shadow-lg">
                 <div className="max-h-56 overflow-auto pr-1">
                   {eventOptions.map((ev) => {
                     const v = `${ev.eventType}:${ev.seed}`
@@ -1540,7 +1538,7 @@ export function ScoreEntryPage() {
 
           <div className="lg:col-span-4">
             <div className="mb-1 text-xs text-slate-400">Options</div>
-            <div className="flex min-h-[40px] flex-wrap items-center gap-2">
+            <div className="flex min-h-10 flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-2 text-sm text-slate-200">
                 <input
                   type="checkbox"
@@ -1629,12 +1627,12 @@ export function ScoreEntryPage() {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-slate-800">
-        <div className="min-w-[1200px]">
+        <div className="min-w-300">
           {/* ID column removed (kept here in case we want to restore it later)
             grid-cols-[120px_44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px]
             <div className="whitespace-nowrap">{headerButton('ID', 'id')}</div>
           */}
-          <div className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+          <div className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_320px] gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div>{headerButton('R', 'round')}</div>
             <div>{headerButton('Ct', 'court')}</div>
             <div>{headerButton('Division', 'division')}</div>
@@ -1673,7 +1671,7 @@ export function ScoreEntryPage() {
             const isPlayoff = (m.stage ?? 'REGULAR') === 'PLAYOFF'
 
             return (
-              <div key={m.id} className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_230px] items-center gap-2 px-3 py-2 text-sm">
+              <div key={m.id} className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_320px] items-center gap-2 px-3 py-2 text-sm">
                 {/* ID column removed (kept here in case we want to restore it later)
                   <div className="font-mono text-[11px] text-slate-400">{rowId}</div>
                 */}
@@ -1706,6 +1704,17 @@ export function ScoreEntryPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
+                  <span
+                    className={[
+                      'max-w-18 rounded border px-1.5 py-0.5 text-center text-[11px] font-semibold',
+                      aWon
+                        ? 'border-emerald-800/70 bg-emerald-950/30 text-emerald-200'
+                        : 'border-slate-700 bg-slate-900/60 text-slate-300',
+                    ].join(' ')}
+                    title={clubAText}
+                  >
+                    {clubAText}
+                  </span>
                   <input
                     inputMode="numeric"
                     className={[
@@ -1721,6 +1730,17 @@ export function ScoreEntryPage() {
                     placeholder="0"
                   />
                   <span className="text-slate-500">-</span>
+                  <span
+                    className={[
+                      'max-w-18 rounded border px-1.5 py-0.5 text-center text-[11px] font-semibold',
+                      bWon
+                        ? 'border-emerald-800/70 bg-emerald-950/30 text-emerald-200'
+                        : 'border-slate-700 bg-slate-900/60 text-slate-300',
+                    ].join(' ')}
+                    title={clubBText}
+                  >
+                    {clubBText}
+                  </span>
                   <input
                     inputMode="numeric"
                     className={[
