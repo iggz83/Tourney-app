@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { computeMatch } from '../domain/analytics'
 import { getPlayerName, getPlayerNameOr } from '../domain/playerName'
 import { getPlayersById, getMatchPlayerIdsForClub, getSeededEventsForDivision } from '../domain/selectors'
-import { makeMatchId } from '../domain/scheduler'
 import type { Match } from '../domain/types'
 import { useTournamentStore } from '../store/useTournamentStore'
 
@@ -52,6 +51,10 @@ function parseScore(v: string): number | undefined {
 
 function isEventType(v: string): v is Match['eventType'] {
   return v === 'WOMENS_DOUBLES' || v === 'MENS_DOUBLES' || v === 'MIXED_DOUBLES'
+}
+
+function isManualMatch(m: Match): boolean {
+  return String(m.id).startsWith('manual:')
 }
 
 type SortKey = 'id' | 'round' | 'court' | 'division' | 'event' | 'match' | 'players' | 'score'
@@ -134,6 +137,9 @@ export function ScoreEntryPage() {
   const [courtOverwrite, setCourtOverwrite] = useState<boolean>(false)
   const [drafts, setDrafts] = useState<Record<string, { a: string; b: string }>>({})
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null)
+  const [metricsOpen, setMetricsOpen] = useState<boolean>(false)
+  const [metricsScope, setMetricsScope] = useState<'all' | 'filtered'>('all')
+  const [showAllPlayersMetrics, setShowAllPlayersMetrics] = useState<boolean>(false)
   const divisionFilterRef = useRef<HTMLDetailsElement | null>(null)
   const roundFilterRef = useRef<HTMLDetailsElement | null>(null)
   const eventFilterRef = useRef<HTMLDetailsElement | null>(null)
@@ -251,6 +257,8 @@ export function ScoreEntryPage() {
           playersLineB,
           `${aNames} | ${bNames}`,
           m.score ? `${m.score.a}-${m.score.b}` : '',
+          isManualMatch(m) ? 'manual' : '',
+          (m.stage ?? 'REGULAR') === 'PLAYOFF' ? 'playoff' : '',
         ]
           .join(' ')
           .toLowerCase()
@@ -397,6 +405,185 @@ export function ScoreEntryPage() {
       })
       .map(([id]) => id)
   }, [drafts, sorted])
+
+  const metrics = useMemo(() => {
+    const matchesForMetrics = metricsScope === 'filtered' ? sorted : state.matches
+    const clubCodeById = new Map(state.clubs.map((c) => [c.id, c.code || c.id]))
+    const teamStats = new Map<
+      string,
+      {
+        clubId: string
+        label: string
+        scheduled: number
+        played: number
+        wins: number
+        losses: number
+        pointsFor: number
+        pointsAgainst: number
+      }
+    >()
+    for (const c of state.clubs) {
+      teamStats.set(c.id, {
+        clubId: c.id,
+        label: clubCodeById.get(c.id) ?? c.id,
+        scheduled: 0,
+        played: 0,
+        wins: 0,
+        losses: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+      })
+    }
+
+    const playerScheduled = new Map<string, number>()
+    const playerPlayed = new Map<string, number>()
+    let totalPlayed = 0
+    let playoffCount = 0
+    let manualCount = 0
+
+    for (const m of matchesForMetrics) {
+      const played = Boolean(m.score) && Boolean(m.completedAt)
+      if (played) totalPlayed++
+      if ((m.stage ?? 'REGULAR') === 'PLAYOFF') playoffCount++
+      if (isManualMatch(m)) manualCount++
+
+      const a = teamStats.get(m.clubA) ?? {
+        clubId: m.clubA,
+        label: clubCodeById.get(m.clubA) ?? m.clubA,
+        scheduled: 0,
+        played: 0,
+        wins: 0,
+        losses: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+      }
+      const b = teamStats.get(m.clubB) ?? {
+        clubId: m.clubB,
+        label: clubCodeById.get(m.clubB) ?? m.clubB,
+        scheduled: 0,
+        played: 0,
+        wins: 0,
+        losses: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+      }
+
+      a.scheduled += 1
+      b.scheduled += 1
+      if (played) {
+        a.played += 1
+        b.played += 1
+      }
+
+      if (m.score) {
+        a.pointsFor += m.score.a
+        a.pointsAgainst += m.score.b
+        b.pointsFor += m.score.b
+        b.pointsAgainst += m.score.a
+        if (m.score.a > m.score.b) {
+          a.wins += 1
+          b.losses += 1
+        } else if (m.score.b > m.score.a) {
+          b.wins += 1
+          a.losses += 1
+        }
+      }
+
+      teamStats.set(a.clubId, a)
+      teamStats.set(b.clubId, b)
+
+      const participantIds = new Set<string>()
+      const aPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubA })
+      const bPair = getMatchPlayerIdsForClub({ state, match: m, clubId: m.clubB })
+      for (const id of [...(aPair ?? []), ...(bPair ?? [])]) {
+        if (!id) continue
+        participantIds.add(id)
+      }
+      for (const playerId of participantIds) {
+        playerScheduled.set(playerId, (playerScheduled.get(playerId) ?? 0) + 1)
+        if (played) playerPlayed.set(playerId, (playerPlayed.get(playerId) ?? 0) + 1)
+      }
+    }
+
+    const teamRows = [...teamStats.values()].sort((x, y) => {
+      if (y.played !== x.played) return y.played - x.played
+      if (y.scheduled !== x.scheduled) return y.scheduled - x.scheduled
+      return x.label.localeCompare(y.label)
+    })
+
+    const namedPlayers = state.players.filter((p) => getPlayerName(p).trim().length > 0)
+    const playerRowsByName = new Map<
+      string,
+      {
+        id: string
+        name: string
+        club: string
+        scheduled: number
+        played: number
+      }
+    >()
+
+    for (const p of namedPlayers) {
+      const name = getPlayerNameOr(p, p.id).trim()
+      if (!name.length) continue
+      const nameKey = name.toLowerCase()
+      const scheduled = playerScheduled.get(p.id) ?? 0
+      const played = playerPlayed.get(p.id) ?? 0
+      const club = clubCodeById.get(p.clubId) ?? p.clubId
+      const prev = playerRowsByName.get(nameKey)
+      if (!prev) {
+        playerRowsByName.set(nameKey, { id: nameKey, name, club, scheduled, played })
+        continue
+      }
+
+      prev.scheduled += scheduled
+      prev.played += played
+      if (!prev.club.includes(club)) prev.club = `${prev.club}, ${club}`
+      playerRowsByName.set(nameKey, prev)
+    }
+
+    const groupedPlayers = [...playerRowsByName.values()]
+    const namedPlayerCount = groupedPlayers.length
+    const activeNamed = groupedPlayers.filter((p) => p.scheduled > 0)
+
+    const sumNamedScheduled = groupedPlayers.reduce((n, p) => n + p.scheduled, 0)
+    const sumNamedPlayed = groupedPlayers.reduce((n, p) => n + p.played, 0)
+    const sumActiveScheduled = activeNamed.reduce((n, p) => n + p.scheduled, 0)
+    const sumActivePlayed = activeNamed.reduce((n, p) => n + p.played, 0)
+
+    const playerRows = groupedPlayers.filter((r) => r.scheduled > 0)
+
+    const topPlayedPlayers = [...playerRows]
+      .sort((x, y) => {
+        if (y.played !== x.played) return y.played - x.played
+        if (y.scheduled !== x.scheduled) return y.scheduled - x.scheduled
+        return x.name.localeCompare(y.name)
+      })
+
+    const lowPlayedPlayers = [...playerRows]
+      .sort((x, y) => {
+        if (x.played !== y.played) return x.played - y.played
+        if (x.scheduled !== y.scheduled) return x.scheduled - y.scheduled
+        return x.name.localeCompare(y.name)
+      })
+
+    return {
+      totalGames: matchesForMetrics.length,
+      totalPlayed,
+      totalRemaining: Math.max(0, matchesForMetrics.length - totalPlayed),
+      playoffCount,
+      manualCount,
+      teamRows,
+      namedPlayerCount,
+      activeNamedPlayerCount: activeNamed.length,
+      avgScheduledPerNamed: namedPlayerCount ? sumNamedScheduled / namedPlayerCount : 0,
+      avgPlayedPerNamed: namedPlayerCount ? sumNamedPlayed / namedPlayerCount : 0,
+      avgScheduledPerActiveNamed: activeNamed.length ? sumActiveScheduled / activeNamed.length : 0,
+      avgPlayedPerActiveNamed: activeNamed.length ? sumActivePlayed / activeNamed.length : 0,
+      mostUsedPlayers: topPlayedPlayers,
+      leastUsedPlayers: lowPlayedPlayers,
+    }
+  }, [metricsScope, sorted, state])
 
   // Manual match UI (Add match)
   const [addMatchOpen, setAddMatchOpen] = useState<boolean>(false)
@@ -867,7 +1054,7 @@ export function ScoreEntryPage() {
             onClick={() => {
               if (
                 !confirm(
-                  'Regenerate schedule?\n\nThis will DELETE the current schedule and CLEAR ALL SCORES.\nUse this if you want to start over.\n\nContinue?',
+                  'Regenerate schedule?\n\nThis will regenerate the non-manual schedule and CLEAR ALL SCORES.\nManual games are kept and must be removed by hand.\n\nContinue?',
                 )
               )
                 return
@@ -930,6 +1117,13 @@ export function ScoreEntryPage() {
             title="Saves only the entered scores in the current filter"
           >
             Save filtered {pendingFilteredDraftIds.length ? `(${pendingFilteredDraftIds.length})` : ''}
+          </button>
+          <button
+            className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
+            onClick={() => setMetricsOpen(true)}
+            title="View tournament metrics"
+          >
+            Metrics
           </button>
           <button
             className={[
@@ -1307,7 +1501,7 @@ export function ScoreEntryPage() {
                     actions.setSeed(divId, clubA, eventType, seed, [pa1?.id ?? null, pa2?.id ?? null])
                     actions.setSeed(divId, clubB, eventType, seed, [pb1?.id ?? null, pb2?.id ?? null])
 
-                    const id = makeMatchId({ divisionId: divId, clubA, clubB, eventType, seed })
+                    const id = `manual:${crypto.randomUUID()}`
                     const newMatch: Match = {
                       id,
                       divisionId: divId,
@@ -1326,6 +1520,185 @@ export function ScoreEntryPage() {
                 >
                   Add match
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {metricsOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-100">Tournament Metrics</div>
+                <div className="text-xs text-slate-400">Useful snapshots for scheduling progress, team load, and player utilization.</div>
+                <div className="mt-2 inline-flex rounded-md border border-slate-700 bg-slate-900/50 p-0.5 text-xs">
+                  <button
+                    className={[
+                      'rounded px-2 py-1',
+                      metricsScope === 'all' ? 'bg-slate-200 text-slate-900' : 'text-slate-300 hover:bg-slate-800',
+                    ].join(' ')}
+                    onClick={() => setMetricsScope('all')}
+                  >
+                    All matches
+                  </button>
+                  <button
+                    className={[
+                      'rounded px-2 py-1',
+                      metricsScope === 'filtered' ? 'bg-slate-200 text-slate-900' : 'text-slate-300 hover:bg-slate-800',
+                    ].join(' ')}
+                    onClick={() => setMetricsScope('filtered')}
+                  >
+                    Filtered matches
+                  </button>
+                </div>
+              </div>
+              <button
+                className="rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-900 hover:text-white"
+                onClick={() => setMetricsOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="max-h-[75vh] space-y-4 overflow-auto p-4">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Games scheduled</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-100">{metrics.totalGames}</div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Games played</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-emerald-200">{metrics.totalPlayed}</div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Games remaining</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-amber-200">{metrics.totalRemaining}</div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Playoff games</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-indigo-200">{metrics.playoffCount}</div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Manual games</div>
+                  <div className="mt-1 text-2xl font-semibold tabular-nums text-cyan-200">{metrics.manualCount}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-800">
+                <div className="border-b border-slate-800 px-3 py-2 text-sm font-semibold text-slate-200">Team Workload</div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-900/50 text-xs text-slate-400">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Team</th>
+                        <th className="px-3 py-2 text-right">Scheduled</th>
+                        <th className="px-3 py-2 text-right">Played</th>
+                        <th className="px-3 py-2 text-right">Completion</th>
+                        <th className="px-3 py-2 text-right">W-L</th>
+                        <th className="px-3 py-2 text-right">Point Diff</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-200">
+                      {metrics.teamRows.map((r) => {
+                        const completion = r.scheduled > 0 ? Math.round((r.played / r.scheduled) * 100) : 0
+                        const pointDiff = r.pointsFor - r.pointsAgainst
+                        return (
+                          <tr key={r.clubId}>
+                            <td className="px-3 py-2 font-medium">{r.label}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.scheduled}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.played}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{completion}%</td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.wins}-{r.losses}</td>
+                            <td className={['px-3 py-2 text-right tabular-nums', pointDiff >= 0 ? 'text-emerald-200' : 'text-rose-200'].join(' ')}>
+                              {pointDiff > 0 ? `+${pointDiff}` : pointDiff}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Named players</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-slate-100">{metrics.namedPlayerCount}</div>
+                  <div className="mt-1 text-xs text-slate-500">Active in schedule: {metrics.activeNamedPlayerCount}</div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Avg games per named player</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-slate-100">
+                    {metrics.avgScheduledPerNamed.toFixed(2)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">Played avg: {metrics.avgPlayedPerNamed.toFixed(2)}</div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+                  <div className="text-xs text-slate-400">Avg games per active named player</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-slate-100">
+                    {metrics.avgScheduledPerActiveNamed.toFixed(2)}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">Played avg: {metrics.avgPlayedPerActiveNamed.toFixed(2)}</div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded-xl border border-slate-800">
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2">
+                    <div className="text-sm font-semibold text-slate-200">
+                      {showAllPlayersMetrics ? 'Most-Used Players (All)' : 'Top 5 Most-Used Players'}
+                    </div>
+                    <button
+                      className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-900 hover:text-white"
+                      onClick={() => setShowAllPlayersMetrics((v) => !v)}
+                    >
+                      {showAllPlayersMetrics ? 'Show top 5' : 'Show all players'}
+                    </button>
+                  </div>
+                  <div className="divide-y divide-slate-800">
+                    {(showAllPlayersMetrics ? metrics.mostUsedPlayers : metrics.mostUsedPlayers.slice(0, 5)).length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-slate-400">No named players with scheduled games yet.</div>
+                    ) : (
+                      (showAllPlayersMetrics ? metrics.mostUsedPlayers : metrics.mostUsedPlayers.slice(0, 5)).map((p) => (
+                        <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-slate-100">{p.name}</div>
+                            <div className="text-xs text-slate-500">{p.club}</div>
+                          </div>
+                          <div className="text-right text-xs text-slate-300 tabular-nums">
+                            <div>Scheduled: {p.scheduled}</div>
+                            <div>Played: {p.played}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-800">
+                  <div className="border-b border-slate-800 px-3 py-2 text-sm font-semibold text-slate-200">
+                    {showAllPlayersMetrics ? 'Least-Used Active Players (All)' : 'Top 5 Least-Used Active Players'}
+                  </div>
+                  <div className="divide-y divide-slate-800">
+                    {(showAllPlayersMetrics ? metrics.leastUsedPlayers : metrics.leastUsedPlayers.slice(0, 5)).length === 0 ? (
+                      <div className="px-3 py-3 text-sm text-slate-400">No named players with scheduled games yet.</div>
+                    ) : (
+                      (showAllPlayersMetrics ? metrics.leastUsedPlayers : metrics.leastUsedPlayers.slice(0, 5)).map((p) => (
+                        <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-slate-100">{p.name}</div>
+                            <div className="text-xs text-slate-500">{p.club}</div>
+                          </div>
+                          <div className="text-right text-xs text-slate-300 tabular-nums">
+                            <div>Scheduled: {p.scheduled}</div>
+                            <div>Played: {p.played}</div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1709,6 +2082,7 @@ export function ScoreEntryPage() {
             const playersLineA = `${clubAText}: ${aNames}`
             const playersLineB = `${clubBText}: ${bNames}`
             const isPlayoff = (m.stage ?? 'REGULAR') === 'PLAYOFF'
+            const isManual = isManualMatch(m)
 
             return (
               <div key={m.id} className="grid grid-cols-[44px_54px_minmax(0,120px)_minmax(0,110px)_minmax(0,120px)_minmax(0,1fr)_320px] items-center gap-2 px-3 py-2 text-sm">
@@ -1722,6 +2096,11 @@ export function ScoreEntryPage() {
                   {isPlayoff ? (
                     <span className="mr-2 rounded-full border border-indigo-900/60 bg-indigo-950/30 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">
                       Playoff
+                    </span>
+                  ) : null}
+                  {isManual ? (
+                    <span className="mr-2 rounded-full border border-cyan-900/60 bg-cyan-950/30 px-2 py-0.5 text-[10px] font-semibold text-cyan-200">
+                      Manual
                     </span>
                   ) : null}
                   {highlightText(eventText, highlightNeedle)}

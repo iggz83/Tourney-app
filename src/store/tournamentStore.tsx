@@ -46,6 +46,10 @@ function makePlayoffMatchId(parts: {
   return `p:${slot}:${divisionId}:${eventType}:s${seed}:${a}-vs-${b}`
 }
 
+function isManualMatch(m: Match): boolean {
+  return String(m.id).startsWith('manual:')
+}
+
 function computeClubOrderFromMatches(args: { clubs: ClubId[]; matches: TournamentStateV2['matches'] }): ClubId[] {
   const { clubs, matches } = args
   const byClub = new Map<ClubId, { clubId: ClubId; wins: number; losses: number; pointDiff: number; pointsFor: number }>()
@@ -593,18 +597,24 @@ function reducer(state: TournamentStateV2, action: Action): TournamentStateV2 {
       return touch({ ...state, lineupProfiles, divisionConfigs })
     }
     case 'schedule.generate': {
-      // Simple: replace schedule and drop all scores.
+      // Replace generated schedule but keep manual matches (cleared scores).
       const nextMatches = generateSchedule(state)
       // Safety: if config would generate 0 matches, do nothing (prevents accidental cloud wipe).
       if (nextMatches.length === 0) return state
-      return touch({ ...state, matches: nextMatches })
+      const manualMatches = state.matches
+        .filter((m) => isManualMatch(m))
+        .map((m) => ({ ...m, score: undefined, completedAt: undefined }))
+      return touch({ ...state, matches: [...nextMatches, ...manualMatches] })
     }
     case 'schedule.regenerate': {
-      // Hard reset: replace schedule and drop all scores.
+      // Hard reset generated schedule, but keep manual matches (cleared scores).
       const nextMatches = generateSchedule(state)
       // Safety: if config would generate 0 matches, do nothing (prevents accidental cloud wipe).
       if (nextMatches.length === 0) return state
-      return touch({ ...state, matches: nextMatches })
+      const manualMatches = state.matches
+        .filter((m) => isManualMatch(m))
+        .map((m) => ({ ...m, score: undefined, completedAt: undefined }))
+      return touch({ ...state, matches: [...nextMatches, ...manualMatches] })
     }
     case 'matches.rounds.optimize': {
       if (state.matches.length === 0 || action.matchIds.length === 0) return state
