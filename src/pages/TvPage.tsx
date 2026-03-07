@@ -201,17 +201,10 @@ export function TvPage() {
                     </span>
                   </div>
                   <div
-                    className="text-right tabular-nums whitespace-nowrap"
+                    className="text-right tabular-nums whitespace-nowrap font-extrabold text-slate-100"
                     style={{ fontSize: `${basePx * STAT_SCALE}px`, lineHeight: 1.05 }}
                   >
-                    <span className="font-extrabold text-slate-100">
-                      {row.wins}
-                      <span className="text-slate-500">-{row.losses}</span>
-                    </span>
-                    <span className="mx-3 text-slate-700">•</span>
-                    <span className="ml-2 font-extrabold text-slate-200">
-                      {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
-                    </span>
+                    {row.wins}
                   </div>
                 </div>
               ))}
