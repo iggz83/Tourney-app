@@ -19,6 +19,7 @@ export function TopPlayersPage() {
   const scoresHref = search && search.startsWith('?') ? `/scores${search}` : '/scores'
   const TOP_N = 5
   const BASE_INIT = 18
+  const BASE_MIN = 12
   const clubCodeById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c.code || c.id])), [state.clubs])
   const hasTeamInDivision = useMemo(() => {
     return (divisionId: string, clubId: string) => {
@@ -32,6 +33,8 @@ export function TopPlayersPage() {
     () => new Map(playerStandings.map((row) => [row.playerId, row] as const)),
     [playerStandings],
   )
+
+  const [fitTopN, setFitTopN] = useState<number>(TOP_N)
 
   const topByDivision = useMemo(() => {
     const compare = (a: (typeof playerStandings)[number], b: (typeof playerStandings)[number]) => {
@@ -47,19 +50,19 @@ export function TopPlayersPage() {
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id) }))
         .filter((x): x is { p: (typeof x)['p']; s: NonNullable<(typeof x)['s']> } => Boolean(x.s))
         .sort((x, y) => compare(x.s, y.s))
-        .slice(0, TOP_N)
+        .slice(0, fitTopN)
 
       const men = state.players
         .filter((p) => p.divisionId === d.id && p.gender === 'M' && hasPlayerName(p) && hasTeamInDivision(d.id, p.clubId))
         .map((p) => ({ p, s: playerStandingByPlayerId.get(p.id) }))
         .filter((x): x is { p: (typeof x)['p']; s: NonNullable<(typeof x)['s']> } => Boolean(x.s))
         .sort((x, y) => compare(x.s, y.s))
-        .slice(0, TOP_N)
+        .slice(0, fitTopN)
 
       return { division: d, women, men }
     })
       .filter((x) => x.women.length + x.men.length > 0)
-  }, [TOP_N, hasTeamInDivision, playerStandingByPlayerId, state.divisions, state.players])
+  }, [fitTopN, hasTeamInDivision, playerStandingByPlayerId, state.divisions, state.players])
 
   const rootRef = useRef<HTMLDivElement | null>(null)
   const gridAreaRef = useRef<HTMLDivElement | null>(null)
@@ -94,34 +97,25 @@ export function TopPlayersPage() {
         const W = rect.width
         const H = rect.height
         const N = Math.max(1, topByDivision.length)
+        const maxCols = Math.min(N, 6)
 
-        // Pick a column count that tends to maximize readable font size (rough guess),
-        // then do a measurement-based fit to guarantee no overflow.
-        let bestCols = 1
-        let bestGuess = 12
-        const maxCols = Math.min(N, 4)
-        for (let c = 1; c <= maxCols; c++) {
-          const r = Math.ceil(N / c)
-          const gapPx = 12 // gap-3
-          const availableH = Math.max(0, H - gapPx * Math.max(0, r - 1))
-          const availableW = Math.max(0, W - gapPx * Math.max(0, c - 1))
-          const cardH = availableH / r
-          // Rough lines per card; we still verify by measuring.
-          const lines = 3.6 + TOP_N * 2
-          const fontByHeight = (cardH / lines) * 0.72
-          const cardW = availableW / c
-          const fontByWidth = cardW / 32
-          const candidate = Math.min(fontByHeight, fontByWidth)
-          if (candidate > bestGuess) {
-            bestGuess = candidate
-            bestCols = c
-          }
-        }
-
-        if (bestCols !== cols) {
-          setCols(bestCols)
+        const activeCols = clamp(cols, 1, maxCols)
+        if (activeCols !== cols) {
+          setCols(activeCols)
           return
         }
+
+        const r = Math.ceil(N / activeCols)
+        const gapPx = 12 // gap-3
+        const availableH = Math.max(0, H - gapPx * Math.max(0, r - 1))
+        const availableW = Math.max(0, W - gapPx * Math.max(0, activeCols - 1))
+        const cardH = availableH / r
+        // Rough lines per card; we still verify by measuring.
+        const lines = 3.6 + fitTopN * 2
+        const fontByHeight = (cardH / lines) * 0.72
+        const cardW = availableW / activeCols
+        const fontByWidth = cardW / 32
+        const bestGuess = Math.min(fontByHeight, fontByWidth)
 
         const setVar = (px: number) => {
           root.style.setProperty('--tp-base', String(px))
@@ -134,9 +128,24 @@ export function TopPlayersPage() {
           return grid.scrollHeight <= grid.clientHeight + 1
         }
 
+        const canFitAtMin = fits(BASE_MIN)
+        if (!canFitAtMin) {
+          if (activeCols < maxCols) {
+            setCols(activeCols + 1)
+            return
+          }
+          if (fitTopN > 1) {
+            setFitTopN((n) => n - 1)
+            return
+          }
+          lastCommittedPxRef.current = BASE_MIN
+          setVar(BASE_MIN)
+          return
+        }
+
         // Binary search the max font size that fits.
-        const hi = clamp(bestGuess, 12, 220)
-        let lo = 12
+        const hi = clamp(bestGuess, BASE_MIN, 220)
+        let lo = BASE_MIN
         let upper = hi
         for (let i = 0; i < 11; i++) {
           const mid = (lo + upper) / 2
@@ -144,7 +153,7 @@ export function TopPlayersPage() {
           else upper = mid
         }
 
-        const next = clamp(lo, 12, 220)
+        const next = clamp(lo, BASE_MIN, 220)
         const prev = lastCommittedPxRef.current
         if (Math.abs(prev - next) >= 0.75) {
           lastCommittedPxRef.current = next
@@ -179,7 +188,7 @@ export function TopPlayersPage() {
       if (debounceRef.current) window.clearTimeout(debounceRef.current)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [BASE_INIT, TOP_N, cols, topByDivision.length])
+  }, [BASE_INIT, BASE_MIN, TOP_N, cols, fitTopN, topByDivision.length])
 
   return (
     <div
@@ -212,7 +221,7 @@ export function TopPlayersPage() {
           </div>
         </div>
 
-        <div ref={gridAreaRef} className="min-h-0 flex-1">
+        <div ref={gridAreaRef} className="min-h-0 flex-1 overflow-hidden">
           <div
             ref={gridRef}
             className="grid h-full gap-3"
