@@ -65,6 +65,144 @@ function download(filename: string, text: string) {
   URL.revokeObjectURL(url)
 }
 
+function escapeHtml(v: string) {
+  return v
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function printHtmlInHiddenFrame(html: string) {
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  iframe.style.opacity = '0'
+  iframe.setAttribute('aria-hidden', 'true')
+
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+    } finally {
+      setTimeout(() => iframe.remove(), 500)
+    }
+  }
+
+  iframe.srcdoc = html
+  document.body.appendChild(iframe)
+}
+
+function printCheckInSheet({
+  players,
+  clubsById,
+  divisionsById,
+  tournamentName,
+}: {
+  players: Array<{ name?: string | null; firstName?: string | null; lastName?: string | null; clubId: string; divisionId: string }>
+  clubsById: Map<string, { code: string; name: string }>
+  divisionsById: Map<string, string>
+  tournamentName: string
+}) {
+  const grouped = new Map<
+    string,
+    {
+      name: string
+      teams: Set<string>
+      divisions: Set<string>
+    }
+  >()
+
+  for (const p of players) {
+    const name = getPlayerNameOr(p, '').trim()
+    if (!name.length) continue
+    const key = name.toLocaleLowerCase()
+    const team = clubsById.get(p.clubId)
+    const teamLabel = team?.name?.trim() ? `${team.code} - ${team.name}` : team?.code ?? p.clubId
+    const divisionLabel = divisionsById.get(p.divisionId) ?? p.divisionId
+
+    const bucket = grouped.get(key) ?? { name, teams: new Set<string>(), divisions: new Set<string>() }
+    bucket.teams.add(teamLabel)
+    bucket.divisions.add(divisionLabel)
+    grouped.set(key, bucket)
+  }
+
+  const rows = Array.from(grouped.values())
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+    .map((row, idx) => {
+      const teams = Array.from(row.teams).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      const divisions = Array.from(row.divisions).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+      return `<tr>
+  <td class="num">${idx + 1}</td>
+  <td class="check">&nbsp;</td>
+  <td>${escapeHtml(row.name)}</td>
+  <td>${escapeHtml(teams.join(', '))}</td>
+  <td>${escapeHtml(divisions.join(', '))}</td>
+  <td class="waiver">&nbsp;</td>
+  <td class="notes">&nbsp;</td>
+</tr>`
+    })
+    .join('\n')
+
+  const printedAt = new Date().toLocaleString()
+  const totalPlayers = grouped.size
+  const title = tournamentName.trim().length ? `${tournamentName.trim()} - Player Check-In` : 'Player Check-In Sheet'
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title)}</title>
+    <style>
+      :root { color-scheme: light; }
+      body { font-family: "Segoe UI", Arial, sans-serif; margin: 20px; color: #0f172a; }
+      h1 { margin: 0 0 4px; font-size: 20px; }
+      .meta { margin: 0 0 12px; font-size: 12px; color: #334155; }
+      .guide { margin: 0 0 12px; font-size: 12px; color: #334155; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 12px; vertical-align: top; overflow-wrap: anywhere; }
+      th { background: #f1f5f9; text-align: left; }
+      .num { width: 28px; text-align: right; }
+      .check { width: 36px; text-align: center; }
+      th:nth-child(3), td:nth-child(3) { width: 24%; }
+      th:nth-child(4), td:nth-child(4) { width: 30%; }
+      th:nth-child(5), td:nth-child(5) { width: 24%; }
+      .waiver { width: 56px; text-align: center; }
+      .notes { width: 90px; }
+      .line { height: 22px; }
+      @media print { body { margin: 0.35in; } }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(title)}</h1>
+    <div class="meta"><b>Printed:</b> ${escapeHtml(printedAt)} &nbsp; <b>Total Players:</b> ${totalPlayers}</div>
+    <div class="guide"><b>Columns:</b> Check = arrived, Waiver = Y/N if needed, Notes = payment/partner/late info.</div>
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th class="check">In</th>
+          <th>Name</th>
+          <th>Team</th>
+          <th>Division(s)</th>
+          <th class="waiver">Waiver</th>
+          <th class="notes">Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || `<tr><td colspan="7" class="line">No players found.</td></tr>`}
+      </tbody>
+    </table>
+  </body>
+</html>`
+
+  printHtmlInHiddenFrame(html)
+}
+
 export function SetupPage() {
   const { state, actions } = useTournamentStore()
   const [divisionId, setDivisionId] = useState(state.divisions[0]?.id ?? SKILL_DIVISIONS[0].id)
@@ -128,6 +266,8 @@ export function SetupPage() {
 
   const tournamentLocked = Boolean(state.tournamentLockedAt)
   const tournamentName = state.tournamentName ?? ''
+  const clubsById = useMemo(() => new Map(state.clubs.map((c) => [c.id, c])), [state.clubs])
+  const divisionsById = useMemo(() => new Map(state.divisions.map((d) => [d.id, d.name])), [state.divisions])
 
   useEffect(() => {
     setWomenSeeds(String(seededCounts.women))
@@ -222,6 +362,20 @@ export function SetupPage() {
               }}
             />
           </label>
+          <button
+            className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium hover:bg-slate-700"
+            onClick={() =>
+              printCheckInSheet({
+                players: state.players,
+                clubsById,
+                divisionsById,
+                tournamentName,
+              })
+            }
+            title="Print alphabetical player check-in sheet"
+          >
+            Check-In
+          </button>
           <button
             className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900"
             onClick={() => {
@@ -1238,7 +1392,7 @@ export function SetupPage() {
               onClick={() => {
                 if (!mappingProfile) return
                 if (mappingProfile.id === state.defaultLineupProfileId) return
-                if (!confirm(`Delete profile \"${mappingProfile.name}\"?\n\nMatches using it will fall back to the default profile.`)) return
+                if (!confirm(`Delete profile "${mappingProfile.name}"?\n\nMatches using it will fall back to the default profile.`)) return
                 actions.deleteLineupProfile(mappingProfile.id)
                 setMappingProfileId(state.defaultLineupProfileId)
               }}
