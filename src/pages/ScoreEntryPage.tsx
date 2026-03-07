@@ -745,7 +745,7 @@ export function ScoreEntryPage() {
       .meta { font-size: 12px; color: #334155; margin: 0 0 12px; }
       .hint { font-size: 12px; color: #334155; margin: 0 0 12px; }
       table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      th, td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; font-size: 12px; }
+      th, td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; font-size: 12px; overflow-wrap: anywhere; }
       th { background: #f1f5f9; text-align: left; }
       th:nth-child(1), td:nth-child(1) { width: 36px; }
       th:nth-child(2), td:nth-child(2) { width: 44px; }
@@ -753,16 +753,29 @@ export function ScoreEntryPage() {
       td:nth-child(4) { width: 110px; }
       td:nth-child(5) { width: 120px; }
       th:nth-child(6), td:nth-child(6) { width: 300px; }
-      td:nth-child(7) { width: 130px; }
+      th:nth-child(7), td:nth-child(7) { width: 124px; }
       .small { color: #64748b; }
       .scoreBoxes { display: grid; gap: 4px; }
-      .boxRow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-      .teamTag { font-weight: 700; font-size: 11px; color: #0f172a; }
+      .boxRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 6px; }
+      .teamTag { font-weight: 700; font-size: 11px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .vs { color: #64748b; }
       .serveFirst { font-weight: 900; }
       .playersLines { line-height: 1.35; }
       .box { display: inline-block; width: 40px; height: 28px; border: 2px solid #0f172a; border-radius: 4px; text-align: center; line-height: 26px; font-weight: 700; font-size: 13px; }
       @media print { body { margin: 0.35in; } }
+      @media print and (orientation: portrait) {
+        th, td { padding: 4px 5px; font-size: 11px; }
+        th:nth-child(1), td:nth-child(1) { width: 26px; }
+        th:nth-child(2), td:nth-child(2) { width: 34px; }
+        td:nth-child(3) { width: 72px; }
+        td:nth-child(4) { width: 78px; }
+        td:nth-child(5) { width: 62px; }
+        th:nth-child(6), td:nth-child(6) { width: auto; }
+        th:nth-child(7), td:nth-child(7) { width: 92px; }
+        .teamTag { font-size: 10px; }
+        .box { width: 30px; height: 22px; line-height: 20px; font-size: 11px; border-width: 1.5px; }
+        .playersLines { line-height: 1.2; }
+      }
     </style>
   </head>
   <body>
