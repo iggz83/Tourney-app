@@ -75,29 +75,37 @@ export function StandingsPage() {
       </div>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold">Club Standings</h2>
+        <h2 className="text-base font-semibold">Team Standings</h2>
         <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <div className="min-w-[720px]">
-          <div className="grid grid-cols-12 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
+          <div className="min-w-225">
+          <div className="grid grid-cols-16 gap-2 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
             <div className="col-span-1">#</div>
-            <div className="col-span-3">Club</div>
+            <div className="col-span-3">Team</div>
             <div className="col-span-2 text-right">W</div>
             <div className="col-span-2 text-right">L</div>
+            <div className="col-span-2 text-right whitespace-nowrap">Win %</div>
             <div className="col-span-2 text-right whitespace-nowrap">PF / PA</div>
             <div className="col-span-2 text-right whitespace-nowrap">Diff</div>
+            <div className="col-span-2 text-right whitespace-nowrap">Avg PD</div>
           </div>
           <div className="divide-y divide-slate-800 bg-slate-950/30">
             {clubStandings.map((row, idx) => (
-              <div key={row.clubId} className="grid grid-cols-12 items-center gap-2 px-3 py-2 text-sm">
+              <div key={row.clubId} className="grid grid-cols-16 items-center gap-2 px-3 py-2 text-sm">
                 <div className="col-span-1 text-slate-400">{idx + 1}</div>
                 <div className="col-span-3 font-semibold text-slate-100">{clubNameById.get(row.clubId) ?? row.clubId}</div>
                 <div className="col-span-2 text-right text-slate-100">{row.wins}</div>
                 <div className="col-span-2 text-right text-slate-300">{row.losses}</div>
                 <div className="col-span-2 text-right tabular-nums text-slate-300 whitespace-nowrap">
+                  {row.matchesPlayed > 0 ? `${((row.wins / row.matchesPlayed) * 100).toFixed(1)}%` : '0.0%'}
+                </div>
+                <div className="col-span-2 text-right tabular-nums text-slate-300 whitespace-nowrap">
                   {row.pointsFor} / {row.pointsAgainst}
                 </div>
                 <div className="col-span-2 text-right tabular-nums font-semibold text-slate-100 whitespace-nowrap">
                   {row.pointDiff >= 0 ? `+${row.pointDiff}` : row.pointDiff}
+                </div>
+                <div className="col-span-2 text-right tabular-nums text-slate-300 whitespace-nowrap">
+                  {row.matchesPlayed > 0 ? (row.pointDiff / row.matchesPlayed).toFixed(2) : '0.00'}
                 </div>
               </div>
             ))}
@@ -146,7 +154,7 @@ export function StandingsPage() {
                 <div className="grid gap-4 lg:grid-cols-2">
                   {women.length > 0 ? (
                   <div className="overflow-x-auto rounded-xl border border-slate-800">
-                    <div className="min-w-[520px]">
+                    <div className="min-w-130">
                       <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
                         <div>Top Women</div>
                         <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
@@ -175,7 +183,7 @@ export function StandingsPage() {
 
                   {men.length > 0 ? (
                   <div className="overflow-x-auto rounded-xl border border-slate-800">
-                    <div className="min-w-[520px]">
+                    <div className="min-w-130">
                       <div className="flex items-center justify-between bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-300">
                         <div>Top Men</div>
                         <div className="text-slate-500">{showAll ? 'All' : `Top ${TOP_N}`}</div>
